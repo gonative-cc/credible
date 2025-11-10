@@ -31,6 +31,7 @@ const E_ALREADY_EXITED: u64 = 8;
 const E_MAX_GOAL_REACHED: u64 = 9;
 const E_INVALID_TOKEN_SUPPLY: u64 = 11;
 const E_NOTHING_TO_CLAIM: u64 = 12;
+const E_NOTHING_TO_EXIT: u64 = 13;
 
 // --- Structs ---
 
@@ -381,31 +382,28 @@ public fun exit_investment<C, T>(
         pod.immediate_unlock_pm,
         allocation.allocation,
     );
-
-    // TODO: verify if we don't have precision errors that can cause a bad debt. Maybe we need a
-    // better precision, or change the math?
-    let vested_portion = (vested_tokens * PERMILLE) / allocation.allocation;
-    let unvested_portion = PERMILLE - vested_portion;
-
+    let funds_unlocked = calculate_vested_tokens(
+        time_elapsed,
+        pod.vesting_duration,
+        pod.immediate_unlock_pm,
+        allocation.invested,
+    );
     let fee_pm = if (clock.timestamp_ms() < pod.vesting_start + pod.small_fee_duration) {
         pod.pod_exit_small_fee_pm
     } else {
         pod.pod_exit_fee_pm
     };
 
-    let unvested_investment = ratio_ext_pm(allocation.invested, unvested_portion);
-    let fee_amount = ratio_ext_pm(unvested_investment, fee_pm);
-    let refund_amount = unvested_investment - fee_amount;
+    let remaining_investment = allocation.invested - funds_unlocked;
+    let fee_amount = ratio_ext_pm(remaining_investment, fee_pm);
+    assert!(remaining_investment > fee_amount, E_NOTHING_TO_EXIT);
 
-    let refund_coin = if (refund_amount > 0) {
-        coin::from_balance(balance::split(&mut pod.funds_vault, refund_amount), ctx)
-    } else {
-        coin::zero(ctx)
-    };
+    let refund_amount = remaining_investment - fee_amount;
+    let refund_coin = coin::from_balance(balance::split(&mut pod.funds_vault, refund_amount), ctx);
 
-    let vested_tokens_to_investor = vested_tokens - allocation.claimed_tokens;
-    let vested_coin = if (vested_tokens_to_investor > 0) {
-        coin::from_balance(balance::split(&mut pod.token_vault, vested_tokens_to_investor), ctx)
+    let to_claim = vested_tokens - allocation.claimed_tokens;
+    let vested_coin = if (to_claim > 0) {
+        coin::from_balance(balance::split(&mut pod.token_vault, to_claim), ctx)
     } else {
         coin::zero(ctx)
     };

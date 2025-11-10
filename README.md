@@ -142,23 +142,15 @@ The exit fee protects the founders from a massive exit.
 **Exit Calculation Details:**
 Let: `I` = Amount invested by the investor, `A` = token allocation for the investor, `Vd` = vesting duration, `Ts` = vesting start time, `T` = exit time.
 
-The vested portion at time `T` is: `vested_portion = immediate_unlock + (T-Ts)/Vd`
-
-If `T <= Ts + small_fee_duration`:
+The vested portion at time `T` is: `vested_portion = (T-Ts)/Vd`.
 
 ```
-claim_back = I × (1 - vested_portion) × (1 - pod_exit_small_fee)
-tokens_received = A × vested_portion
+fee = if(T <= Ts + small_fee_duration) pod_exit_small_fee  else  pod_exit_fee
+claim_back = I × (1 - immediate_unlock) × (1 - vested_portion) × (1 - fee)
+tokens_received = A × (1 - immediate_unlock) × (1 - vested_portion)
 ```
 
-Otherwise:
-
-```
-claim_back = I × (1 - vested_portion) × (1 - pod_exit_fee)
-tokens_received = A × vested_portion
-```
-
-Unclaimed tokens when an investor exits are returned to the founders.
+Remaining unvested tokens are returned to the founders.
 
 ## Consequences
 
