@@ -32,6 +32,7 @@ const E_MAX_GOAL_REACHED: u64 = 9;
 const E_INVALID_TOKEN_SUPPLY: u64 = 11;
 const E_NOTHING_TO_CLAIM: u64 = 12;
 const E_NOTHING_TO_EXIT: u64 = 13;
+const E_ZERO_INVESTMENT: u64 = 14;
 
 // --- Structs ---
 
@@ -76,7 +77,6 @@ public struct Pod<phantom C, phantom T> has key {
     total_allocated: u64,
     investments: Table<address, InvestorAllocation>,
     founder_claimed_funds: u64,
-    vesting_start: u64,
     // Pod Parameters
     token_price: u64,
     price_multiplier: u64,
@@ -112,6 +112,16 @@ public struct EventSubscriptionCancelled has copy, drop {
 }
 public struct EventSettingsUpdated has copy, drop {}
 public struct EventUnallocatedTokensClaimed has copy, drop { pod_id: ID, amount: u64 }
+public struct EventExitInvestment has copy, drop {
+    pod_id: ID,
+    investor: address,
+    invested: u64,
+    allocation: u64,
+}
+public struct EventInvestorClaim has copy, drop { pod_id: ID, investor: address, total_amount: u64 }
+public struct EventFounderClaim has copy, drop { pod_id: ID, total_amount: u64 }
+public struct EventFailedPodRefund has copy, drop { pod_id: ID, investor: address }
+public struct EventFailedPodWithdraw has copy, drop { pod_id: ID }
 
 // --- Module Initialization ---
 fun init(ctx: &mut TxContext) {
@@ -196,7 +206,9 @@ public fun create_pod<C, T>(
             subscription_duration >= settings.min_subscription_duration &&
             vesting_duration >= settings.min_vesting_duration &&
             immediate_unlock_pm <= settings.max_immediate_unlock_pm &&
-            subscription_start > clock.timestamp_ms(),
+        subscription_start > clock.timestamp_ms() &&
+        token_price > 0 &&
+        price_multiplier > 0,
     );
     assert!(params_valid, E_INVALID_PARAMS);
 
@@ -226,7 +238,6 @@ public fun create_pod<C, T>(
         small_fee_duration: settings.small_fee_duration,
         total_raised: 0,
         total_allocated: 0,
-        vesting_start: 0,
         founder_claimed_funds: 0,
     };
 
@@ -261,8 +272,9 @@ public fun invest<C, T>(
     assert!(pod_status(pod, clock) == STATUS_SUBSCRIPTION, E_POD_NOT_SUBSCRIPTION);
     assert!(pod.total_raised < pod.max_goal, E_MAX_GOAL_REACHED);
 
-    let investor = tx_context::sender(ctx);
     let investment_amount = investment.value();
+    assert!(investment_amount > 0, E_ZERO_INVESTMENT);
+    let investor = tx_context::sender(ctx);
     let new_total_raised = pod.total_raised + investment_amount;
 
     let (actual_investment, excess_coin) = if (new_total_raised > pod.max_goal) {
@@ -306,7 +318,7 @@ public fun invest<C, T>(
 }
 
 /// Cancels an investor's subscription. Reduces the investment to the fee amount.
-/// Protected against looping by enforcing a cooldown period between cancellations.
+/// Can be called only once.
 public fun cancel_subscription<C, T>(
     pod: &mut Pod<C, T>,
     settings: &GlobalSettings,
@@ -351,6 +363,7 @@ public fun investor_claim_tokens<C, T>(
     assert!(pod_status(pod, clock) == STATUS_VESTING, E_POD_NOT_VESTING);
     let investor = tx_context::sender(ctx);
     let time_elapsed = pod.elapsed_vesting_time(clock);
+    let pod_id = object::id(pod);
     let allocation = table::borrow_mut(&mut pod.investments, investor);
     let vested_tokens = calculate_vested_tokens(
         time_elapsed,
@@ -362,6 +375,8 @@ public fun investor_claim_tokens<C, T>(
     assert!(to_claim > 0, E_NOTHING_TO_CLAIM);
 
     allocation.claimed_tokens = allocation.claimed_tokens + to_claim;
+    event::emit(EventInvestorClaim { pod_id, investor, total_amount: allocation.claimed_tokens });
+
     coin::from_balance(balance::split(&mut pod.token_vault, to_claim), ctx)
 }
 
@@ -388,7 +403,7 @@ public fun exit_investment<C, T>(
         pod.immediate_unlock_pm,
         allocation.invested,
     );
-    let fee_pm = if (clock.timestamp_ms() < pod.vesting_start + pod.small_fee_duration) {
+    let fee_pm = if (clock.timestamp_ms() < pod.subscription_end + pod.small_fee_duration) {
         pod.pod_exit_small_fee_pm
     } else {
         pod.pod_exit_fee_pm
@@ -413,6 +428,13 @@ public fun exit_investment<C, T>(
         pod.total_allocated = pod.total_allocated - unvested_tokens;
     };
 
+    event::emit(EventExitInvestment {
+        pod_id: object::id(pod),
+        investor,
+        invested: allocation.claimed_tokens+fee_amount,
+        allocation: vested_tokens,
+    });
+
     (refund_coin, vested_coin)
 }
 
@@ -425,6 +447,7 @@ public fun failed_pod_refund<C, T>(
     let investor = tx_context::sender(ctx);
     let allocation = table::remove(&mut pod.investments, investor);
 
+    event::emit(EventFailedPodRefund { pod_id: object::id(pod), investor });
     coin::from_balance(balance::split(&mut pod.funds_vault, allocation.invested), ctx)
 }
 
@@ -447,6 +470,10 @@ public fun founder_claim_funds<C, T>(
     assert!(to_claim > 0, E_NOTHING_TO_CLAIM);
 
     pod.founder_claimed_funds = pod.founder_claimed_funds + to_claim;
+    event::emit(EventFounderClaim {
+        pod_id: object::id(pod),
+        total_amount: pod.founder_claimed_funds,
+    });
     coin::from_balance(balance::split(&mut pod.funds_vault, to_claim), ctx)
 }
 
@@ -459,6 +486,7 @@ public fun failed_pod_withdraw<C, T>(
     assert!(cap.pod_id == object::id(pod), E_NOT_ADMIN);
     assert!(pod_status(pod, clock) == STATUS_FAILED, E_POD_NOT_FAILED);
 
+    event::emit(EventFailedPodWithdraw { pod_id: object::id(pod) });
     coin::from_balance(balance::withdraw_all(&mut pod.token_vault), ctx)
 }
 
@@ -483,6 +511,7 @@ public fun withdraw_unallocated_tokens<C, T>(
 
 public fun calculate_founder_claimable<C, T>(pod: &Pod<C, T>, clock: &Clock): u64 {
     let time_elapsed = pod.elapsed_vesting_time(clock);
+    // NOTE: immediate unlock actually happens right after vesting start
     if (time_elapsed == 0) return 0;
 
     let immediate_unlock = ratio_ext_pm(pod.total_raised, pod.immediate_unlock_pm);
@@ -501,6 +530,7 @@ public fun calculate_vested_tokens(
     immediate_unlock_pm: u64,
     allocation: u64,
 ): u64 {
+    // NOTE: immediate unlock actually happens right after vesting start
     if (time_elapsed == 0) return 0;
 
     let immediate_unlock = ratio_ext_pm(allocation, immediate_unlock_pm);
