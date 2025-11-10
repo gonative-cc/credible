@@ -91,7 +91,10 @@ public struct Pod<phantom C, phantom T> has key {
     small_fee_duration: u64,
 }
 
+//
 // --- Events ---
+//
+
 public struct EventPodCreated has copy, drop { pod_id: ID, founder: address }
 public struct EventInvestmentMade has copy, drop {
     pod_id: ID,
@@ -99,7 +102,6 @@ public struct EventInvestmentMade has copy, drop {
     total_investment: u64,
 }
 public struct EventPodMaxGoal has copy, drop { pod_id: ID }
-public struct EventPodFailed has copy, drop { pod_id: ID }
 public struct EventSubscriptionCancelled has copy, drop {
     pod_id: ID,
     investor: address,
@@ -129,7 +131,7 @@ fun init(ctx: &mut TxContext) {
 }
 
 // --- Platform Admin Functions ---
-public entry fun update_settings(
+public fun update_settings(
     _cap: &PlatformAdminCap,
     settings: &mut GlobalSettings,
     max_immediate_unlock_pm: Option<u64>,
@@ -165,8 +167,12 @@ public entry fun update_settings(
     event::emit(EventSettingsUpdated {});
 }
 
+//
 // --- Pod Creation and Management ---
-public entry fun create_pod<C, T>(
+//
+
+#[allow(lint(self_transfer))]
+public fun create_pod<C, T>(
     settings: &GlobalSettings,
     name: String,
     description: String,
@@ -313,13 +319,12 @@ public fun cancel_subscription<C, T>(
     let pod_id = object::id(pod);
     let i = table::borrow_mut(&mut pod.investments, investor);
     assert!(!i.cancelled, E_INVESTMENT_CANCELLED);
+
     let orig_investment = i.invested;
     let orig_allocation = i.allocation;
-
-    // Reduce allocation.
-    // TODO: use u128
+    // NOTE: no need to use higher precision because the cancel_subscription_keep is small
     i.invested = (orig_investment * settings.cancel_subscription_keep) / PERMILLE;
-    i.allocation = (i.allocation * i.invested) / orig_investment;
+    i.allocation = (orig_allocation * settings.cancel_subscription_keep) / PERMILLE;
     i.cancelled = true;
 
     let refunded = orig_investment - i.invested;
@@ -346,13 +351,13 @@ public fun investor_claim_tokens<C, T>(
     let investor = tx_context::sender(ctx);
     let time_elapsed = pod.elapsed_vesting_time(clock);
     let allocation = table::borrow_mut(&mut pod.investments, investor);
-    let total_vested = calculate_vested_tokens(
+    let vested_tokens = calculate_vested_tokens(
         time_elapsed,
         pod.vesting_duration,
         pod.immediate_unlock_pm,
         allocation.allocation,
     );
-    let to_claim = total_vested - allocation.claimed_tokens;
+    let to_claim = vested_tokens - allocation.claimed_tokens;
     assert!(to_claim > 0, E_NOTHING_TO_CLAIM);
 
     allocation.claimed_tokens = allocation.claimed_tokens + to_claim;
@@ -370,15 +375,16 @@ public fun exit_investment<C, T>(
     assert!(allocation.claimed_tokens < allocation.allocation, E_ALREADY_EXITED);
 
     let time_elapsed = pod.elapsed_vesting_time(clock);
-    let total_vested = calculate_vested_tokens(
+    let vested_tokens = calculate_vested_tokens(
         time_elapsed,
         pod.vesting_duration,
         pod.immediate_unlock_pm,
         allocation.allocation,
     );
-    // TODO: use higher precision!
-    // TODO: verify
-    let vested_portion = (total_vested * PERMILLE) / allocation.allocation;
+
+    // TODO: verify if we don't have precision errors that can cause a bad debt. Maybe we need a
+    // better precision, or change the math?
+    let vested_portion = (vested_tokens * PERMILLE) / allocation.allocation;
     let unvested_portion = PERMILLE - vested_portion;
 
     let fee_pm = if (clock.timestamp_ms() < pod.vesting_start + pod.small_fee_duration) {
@@ -397,14 +403,14 @@ public fun exit_investment<C, T>(
         coin::zero(ctx)
     };
 
-    let vested_tokens_to_investor = total_vested - allocation.claimed_tokens;
+    let vested_tokens_to_investor = vested_tokens - allocation.claimed_tokens;
     let vested_coin = if (vested_tokens_to_investor > 0) {
         coin::from_balance(balance::split(&mut pod.token_vault, vested_tokens_to_investor), ctx)
     } else {
         coin::zero(ctx)
     };
 
-    let unvested_tokens = allocation.allocation - total_vested;
+    let unvested_tokens = allocation.allocation - vested_tokens;
     if (unvested_tokens > 0) {
         pod.total_allocated = pod.total_allocated - unvested_tokens;
     };
@@ -437,6 +443,7 @@ public fun founder_claim_funds<C, T>(
     assert!(cap.pod_id == object::id(pod), E_NOT_ADMIN);
     assert!(pod_status(pod, clock) == STATUS_VESTING, E_POD_NOT_VESTING);
 
+    // TODO: use calculate_vested_tokens
     let total_claimable = calculate_founder_claimable(pod, clock);
     let to_claim = total_claimable - pod.founder_claimed_funds;
     assert!(to_claim > 0, E_NOTHING_TO_CLAIM);
@@ -474,7 +481,7 @@ public fun withdraw_unallocated_tokens<C, T>(
     coin::from_balance(balance::split(&mut pod.token_vault, amount), ctx)
 }
 
-// --- Public (non-entry) View Functions ---
+// --- Public View Functions ---
 
 public fun calculate_founder_claimable<C, T>(pod: &Pod<C, T>, clock: &Clock): u64 {
     let time_elapsed = pod.elapsed_vesting_time(clock);
@@ -516,7 +523,7 @@ public fun calculate_vested_tokens(
 public(package) fun elapsed_vesting_time<C, T>(pod: &Pod<C, T>, clock: &Clock): u64 {
     assert!(pod_status(pod, clock) == STATUS_VESTING, E_POD_NOT_VESTING);
     let now = clock.timestamp_ms();
-    return now - pod.subscription_end
+    now - pod.subscription_end
 }
 
 /// calculates num * numerator / denominator using extended precision (u128)
