@@ -113,22 +113,22 @@ Once a pod is created, anyone can subscribe for investment during the subscripti
    - The subscription phase ends early.
 
 During the subscription phase investors can cancel their subscription by calling `cancel_subscription`. `investment × cancel_subscription_keep` will be kept as an investment. This will be fully refundable if the Pod didn't reach the `min_investment_goal`. Otherwise, this will be kept as a reduced investment.
-NOTE: investor can cancel the subscription only once. If an investor cancels his subscription, and then increases his investments, then he can't cancel it again.
+NOTE: investor can cancel the subscription only once. If an investor cancels his subscription, and then invest more, then he can't cancel it again.
 
 ### Phase 3: Vesting and Token Distribution
 
 Starts when the minimum investment goal is reached and the subscription period ended. Let `F` be the total amount of funds raised.
 
-- Founders receive `immediate_unlock × F` funds immediately.
-- If the `max_investment_goal` is not reached, Founders can withdraw the remaining tokens.
-- Investors can claim `immediate_unlock` of their token allocation immediately.
+- Investors can claim `immediate_unlock` of their token allocation.
+- Founders can claim `immediate_unlock × F`.
+- Founders can withdraw the unallocated tokens.
 
 Following this, a linear real-time vesting period begins:
 
 - Founders receive funds according to the vesting schedule.
 - Investors can claim their vested tokens.
 
-Progress Update: Founders must provide regular progress updates through the linked forum/discourse thread. Failure to provide updates for more than 30 days may trigger investor exiting form their investment.
+Progress Update: Founders should provide regular progress updates through the linked forum/discourse thread (this is not tracked on-chain). Failure to provide updates may trigger investor exiting form their investment.
 
 ### Exit Mechanism
 

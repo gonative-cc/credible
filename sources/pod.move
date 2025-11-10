@@ -111,12 +111,12 @@ public struct EventSubscriptionCancelled has copy, drop {
     allocation: u64,
 }
 public struct EventSettingsUpdated has copy, drop {}
-public struct EventUnallocatedTokensClaimed has copy, drop { pod_id: ID, amount: u64 }
+public struct EventUnallocatedTokensWithdrawn has copy, drop { pod_id: ID, amount: u64 }
 public struct EventExitInvestment has copy, drop {
     pod_id: ID,
     investor: address,
-    invested: u64,
-    allocation: u64,
+    total_investment: u64,
+    total_allocation: u64,
 }
 public struct EventInvestorClaim has copy, drop { pod_id: ID, investor: address, total_amount: u64 }
 public struct EventFounderClaim has copy, drop { pod_id: ID, total_amount: u64 }
@@ -159,7 +159,9 @@ public fun update_settings(
         settings.max_immediate_unlock_pm = option::destroy_some(max_immediate_unlock_pm);
     };
     if (option::is_some(&min_vesting_duration)) {
-        settings.min_vesting_duration = option::destroy_some(min_vesting_duration);
+        let v = option::destroy_some(min_vesting_duration);
+        assert!(v > 0, E_INVALID_PARAMS);
+        settings.min_vesting_duration = v;
     };
     if (option::is_some(&min_subscription_duration)) {
         settings.min_subscription_duration = option::destroy_some(min_subscription_duration);
@@ -432,8 +434,8 @@ public fun exit_investment<C, T>(
     event::emit(EventExitInvestment {
         pod_id: object::id(pod),
         investor,
-        invested: allocation.claimed_tokens+fee_amount,
-        allocation: vested_tokens,
+        total_investment: funds_unlocked+fee_amount,
+        total_allocation: vested_tokens,
     });
 
     (refund_coin, vested_coin)
@@ -503,7 +505,7 @@ public fun withdraw_unallocated_tokens<C, T>(
 
     let amount = pod.token_vault.value() - pod.total_allocated;
     assert!(amount > 0, E_NOTHING_TO_CLAIM);
-    event::emit(EventUnallocatedTokensClaimed { pod_id: object::id(pod), amount });
+    event::emit(EventUnallocatedTokensWithdrawn { pod_id: object::id(pod), amount });
 
     coin::from_balance(balance::split(&mut pod.token_vault, amount), ctx)
 }
@@ -512,10 +514,9 @@ public fun withdraw_unallocated_tokens<C, T>(
 
 public fun calculate_founder_claimable<C, T>(pod: &Pod<C, T>, clock: &Clock): u64 {
     let time_elapsed = pod.elapsed_vesting_time(clock);
-    // NOTE: immediate unlock actually happens right after vesting start
-    if (time_elapsed == 0) return 0;
-
     let immediate_unlock = ratio_ext_pm(pod.total_raised, pod.immediate_unlock_pm);
+    if (time_elapsed == 0) return immediate_unlock;
+
     let vested_funds = if (time_elapsed >= pod.vesting_duration) {
         pod.total_raised - immediate_unlock
     } else {
@@ -531,10 +532,9 @@ public fun calculate_vested_tokens(
     immediate_unlock_pm: u64,
     allocation: u64,
 ): u64 {
-    // NOTE: immediate unlock actually happens right after vesting start
-    if (time_elapsed == 0) return 0;
-
     let immediate_unlock = ratio_ext_pm(allocation, immediate_unlock_pm);
+    if (time_elapsed == 0) return immediate_unlock;
+
     let vested_tokens = if (time_elapsed >= vesting_duration) {
         allocation - immediate_unlock
     } else {
