@@ -254,6 +254,41 @@ public fun create_pod<C, T>(
 }
 
 // --- Public View Functions ---
+
+public fun get_global_settings_pm(settings: &GlobalSettings): (u64, u64, u64, u64, u64, u64, u64) {
+    (
+        settings.max_immediate_unlock_pm,
+        settings.min_vesting_duration,
+        settings.min_subscription_duration,
+        settings.pod_exit_fee_pm,
+        settings.pod_exit_small_fee_pm,
+        settings.small_fee_duration,
+        settings.cancel_subscription_keep,
+    )
+}
+
+public fun get_pod_params<C, T>(pod: &Pod<C, T>): (u64, u64, u64, u64, u64, u64, u64, u64, u64) {
+    (
+        pod.token_price,
+        pod.price_multiplier,
+        pod.min_goal,
+        pod.max_goal,
+        pod.subscription_start,
+        pod.subscription_end,
+        pod.vesting_duration,
+        pod.immediate_unlock_pm,
+        pod.total_raised,
+    )
+}
+
+public fun pod_token_vault_value<C, T>(pod: &Pod<C, T>): u64 {
+    pod.token_vault.value()
+}
+
+public fun pod_total_allocated<C, T>(pod: &Pod<C, T>): u64 {
+    pod.total_allocated
+}
+
 public fun pod_status<C, T>(pod: &Pod<C, T>, clock: &Clock): u8 {
     let now = clock.timestamp_ms();
     if (now < pod.subscription_start) {
@@ -265,7 +300,18 @@ public fun pod_status<C, T>(pod: &Pod<C, T>, clock: &Clock): u8 {
     }
 }
 
+/// returns Some(InvestorAllocation) for the investor if he invest in the pod.
+/// Otherwise returns None.
+public fun investor_record<C, T>(pod: &Pod<C, T>, investor: address): Option<InvestorAllocation> {
+    if (!pod.investments.contains(investor)) return option::none();
+
+    option::some(pod.investments[investor])
+}
+
+//
 // --- Investor Functions ---
+//
+
 public fun invest<C, T>(
     pod: &mut Pod<C, T>,
     mut investment: Coin<C>,
@@ -556,11 +602,20 @@ public(package) fun elapsed_vesting_time<C, T>(pod: &Pod<C, T>, clock: &Clock): 
 }
 
 /// calculates num * numerator / denominator using extended precision (u128)
-public(package) fun ratio_ext(x: u64, numerator: u64, denominator: u64): u64 {
+public fun ratio_ext(x: u64, numerator: u64, denominator: u64): u64 {
     ((x as u128) * (numerator as u128) / (denominator as u128)) as u64
 }
 
 /// calculates num * numerator / PERMILLE using extended precision (u128)
-public(package) fun ratio_ext_pm(x: u64, numerator: u64): u64 {
+public fun ratio_ext_pm(x: u64, numerator: u64): u64 {
     ((x as u128) * (numerator as u128) / PERMILLE_U128) as u64
+}
+
+//
+// --- Tests ---
+//
+
+#[test_only]
+public fun init_for_tests(ctx: &mut TxContext) {
+    init(ctx);
 }
