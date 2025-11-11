@@ -5,7 +5,7 @@ use std::string::String;
 use sui::balance::{Self, Balance};
 use sui::clock::{Self, Clock};
 use sui::coin::{Self, Coin};
-use sui::event;
+use sui::event::emit;
 use sui::table::{Self, Table};
 use sui::url::{Self, Url};
 
@@ -178,7 +178,7 @@ public fun update_settings(
     if (option::is_some(&cancel_subscription_keep)) {
         settings.cancel_subscription_keep = option::destroy_some(cancel_subscription_keep);
     };
-    event::emit(EventSettingsUpdated {});
+    emit(EventSettingsUpdated {});
 }
 
 //
@@ -247,10 +247,10 @@ public fun create_pod<C, T>(
     let pod_id = object::id(&pod);
     let cap = PodAdminCap { id: object::new(ctx), pod_id };
 
-    event::emit(EventPodCreated { pod_id, founder: tx_context::sender(ctx) });
+    emit(EventPodCreated { pod_id, founder: ctx.sender() });
 
     transfer::share_object(pod);
-    transfer::public_transfer(cap, tx_context::sender(ctx));
+    transfer::public_transfer(cap, ctx.sender());
 }
 
 // --- Public View Functions ---
@@ -323,7 +323,7 @@ public fun invest<C, T>(
 
     let investment_amount = investment.value();
     assert!(investment_amount > 0, E_ZERO_INVESTMENT);
-    let investor = tx_context::sender(ctx);
+    let investor = ctx.sender();
     let new_total_raised = pod.total_raised + investment_amount;
 
     let (actual_investment, excess_coin) = if (new_total_raised > pod.max_goal) {
@@ -337,10 +337,10 @@ public fun invest<C, T>(
     let additional_tokens = ratio_ext(pod.price_multiplier, actual_investment, pod.token_price);
     pod.total_raised = pod.total_raised + actual_investment;
     pod.total_allocated = pod.total_allocated + additional_tokens;
-    balance::join(&mut pod.funds_vault, investment.into_balance());
+    pod.funds_vault.join(investment.into_balance());
 
-    let total_investment = if (table::contains(&pod.investments, investor)) {
-        let allocation = table::borrow_mut(&mut pod.investments, investor);
+    let total_investment = if (pod.investments.contains(investor)) {
+        let allocation = &mut pod.investments[investor];
         allocation.invested = allocation.invested + actual_investment;
         allocation.allocation = allocation.allocation + additional_tokens;
         allocation.invested
@@ -351,16 +351,16 @@ public fun invest<C, T>(
             claimed_tokens: 0,
             cancelled: false,
         };
-        table::add(&mut pod.investments, investor, allocation);
+        pod.investments.add(investor, allocation);
         actual_investment
     };
 
-    event::emit(EventInvestmentMade { pod_id: object::id(pod), investor, total_investment });
+    emit(EventInvestmentMade { pod_id: object::id(pod), investor, total_investment });
 
     if (pod.total_raised >= pod.max_goal) {
         // This triggers vesting start
         pod.subscription_end = clock::timestamp_ms(clock);
-        event::emit(EventPodMaxGoal { pod_id: object::id(pod) });
+        emit(EventPodMaxGoal { pod_id: object::id(pod) });
     };
 
     excess_coin
@@ -376,10 +376,10 @@ public fun cancel_subscription<C, T>(
 ): Coin<C> {
     assert!(pod_status(pod, clock) == STATUS_SUBSCRIPTION, E_POD_NOT_SUBSCRIPTION);
 
-    let investor = tx_context::sender(ctx);
-    assert!(table::contains(&pod.investments, investor), E_INVESTMENT_NOT_FOUND);
+    let investor = ctx.sender();
+    assert!(pod.investments.contains(investor), E_INVESTMENT_NOT_FOUND);
     let pod_id = object::id(pod);
-    let i = table::borrow_mut(&mut pod.investments, investor);
+    let i = &mut pod.investments[investor];
     assert!(!i.cancelled, E_INVESTMENT_CANCELLED);
 
     let orig_investment = i.invested;
@@ -394,14 +394,14 @@ public fun cancel_subscription<C, T>(
     let allocation_reduction = orig_allocation - i.allocation;
     pod.total_allocated = pod.total_allocated - allocation_reduction;
 
-    event::emit(EventSubscriptionCancelled {
+    emit(EventSubscriptionCancelled {
         pod_id,
         investor,
         refunded,
         invested: i.invested,
         allocation: i.allocation,
     });
-    coin::from_balance(balance::split(&mut pod.funds_vault, refunded), ctx)
+    coin::take(&mut pod.funds_vault, refunded, ctx)
 }
 
 public fun investor_claim_tokens<C, T>(
@@ -410,10 +410,10 @@ public fun investor_claim_tokens<C, T>(
     ctx: &mut TxContext,
 ): Coin<T> {
     assert!(pod_status(pod, clock) == STATUS_VESTING, E_POD_NOT_VESTING);
-    let investor = tx_context::sender(ctx);
+    let investor = ctx.sender();
     let time_elapsed = pod.elapsed_vesting_time(clock);
     let pod_id = object::id(pod);
-    let allocation = table::borrow_mut(&mut pod.investments, investor);
+    let allocation = &mut pod.investments[investor];
     let vested_tokens = calculate_vested_tokens(
         time_elapsed,
         pod.vesting_duration,
@@ -424,9 +424,9 @@ public fun investor_claim_tokens<C, T>(
     assert!(to_claim > 0, E_NOTHING_TO_CLAIM);
 
     allocation.claimed_tokens = allocation.claimed_tokens + to_claim;
-    event::emit(EventInvestorClaim { pod_id, investor, total_amount: allocation.claimed_tokens });
+    emit(EventInvestorClaim { pod_id, investor, total_amount: allocation.claimed_tokens });
 
-    coin::from_balance(balance::split(&mut pod.token_vault, to_claim), ctx)
+    coin::take(&mut pod.token_vault, to_claim, ctx)
 }
 
 public fun exit_investment<C, T>(
@@ -435,8 +435,8 @@ public fun exit_investment<C, T>(
     ctx: &mut TxContext,
 ): (Coin<C>, Coin<T>) {
     assert!(pod_status(pod, clock) == STATUS_VESTING, E_POD_NOT_VESTING);
-    let investor = tx_context::sender(ctx);
-    let allocation = table::remove(&mut pod.investments, investor);
+    let investor = ctx.sender();
+    let allocation = pod.investments.remove(investor);
     assert!(allocation.claimed_tokens < allocation.allocation, E_ALREADY_EXITED);
 
     let time_elapsed = pod.elapsed_vesting_time(clock);
@@ -463,11 +463,11 @@ public fun exit_investment<C, T>(
     assert!(remaining_investment > fee_amount, E_NOTHING_TO_EXIT);
 
     let refund_amount = remaining_investment - fee_amount;
-    let refund_coin = coin::from_balance(balance::split(&mut pod.funds_vault, refund_amount), ctx);
+    let refund_coin = coin::take(&mut pod.funds_vault, refund_amount, ctx);
 
     let to_claim = vested_tokens - allocation.claimed_tokens;
     let vested_coin = if (to_claim > 0) {
-        coin::from_balance(balance::split(&mut pod.token_vault, to_claim), ctx)
+        coin::take(&mut pod.token_vault, to_claim, ctx)
     } else {
         coin::zero(ctx)
     };
@@ -477,7 +477,7 @@ public fun exit_investment<C, T>(
         pod.total_allocated = pod.total_allocated - unvested_tokens;
     };
 
-    event::emit(EventExitInvestment {
+    emit(EventExitInvestment {
         pod_id: object::id(pod),
         investor,
         total_investment: funds_unlocked+fee_amount,
@@ -493,11 +493,11 @@ public fun failed_pod_refund<C, T>(
     ctx: &mut TxContext,
 ): Coin<C> {
     assert!(pod_status(pod, clock) == STATUS_FAILED, E_POD_NOT_FAILED);
-    let investor = tx_context::sender(ctx);
-    let allocation = table::remove(&mut pod.investments, investor);
+    let investor = ctx.sender();
+    let allocation = pod.investments.remove(investor);
 
-    event::emit(EventFailedPodRefund { pod_id: object::id(pod), investor });
-    coin::from_balance(balance::split(&mut pod.funds_vault, allocation.invested), ctx)
+    emit(EventFailedPodRefund { pod_id: object::id(pod), investor });
+    coin::take(&mut pod.funds_vault, allocation.invested, ctx)
 }
 
 //
@@ -518,11 +518,11 @@ public fun founder_claim_funds<C, T>(
     assert!(to_claim > 0, E_NOTHING_TO_CLAIM);
 
     pod.founder_claimed_funds = pod.founder_claimed_funds + to_claim;
-    event::emit(EventFounderClaim {
+    emit(EventFounderClaim {
         pod_id: object::id(pod),
         total_amount: pod.founder_claimed_funds,
     });
-    coin::from_balance(balance::split(&mut pod.funds_vault, to_claim), ctx)
+    coin::take(&mut pod.funds_vault, to_claim, ctx)
 }
 
 public fun failed_pod_withdraw<C, T>(
@@ -534,8 +534,8 @@ public fun failed_pod_withdraw<C, T>(
     assert!(cap.pod_id == object::id(pod), E_NOT_ADMIN);
     assert!(pod_status(pod, clock) == STATUS_FAILED, E_POD_NOT_FAILED);
 
-    event::emit(EventFailedPodWithdraw { pod_id: object::id(pod) });
-    coin::from_balance(balance::withdraw_all(&mut pod.token_vault), ctx)
+    emit(EventFailedPodWithdraw { pod_id: object::id(pod) });
+    coin::from_balance(pod.token_vault.withdraw_all(), ctx)
 }
 
 /// Enable founders to withdraw unallocated tokens
@@ -550,9 +550,9 @@ public fun withdraw_unallocated_tokens<C, T>(
 
     let amount = pod.token_vault.value() - pod.total_allocated;
     assert!(amount > 0, E_NOTHING_TO_CLAIM);
-    event::emit(EventUnallocatedTokensWithdrawn { pod_id: object::id(pod), amount });
+    emit(EventUnallocatedTokensWithdrawn { pod_id: object::id(pod), amount });
 
-    coin::from_balance(balance::split(&mut pod.token_vault, amount), ctx)
+    coin::take(&mut pod.token_vault, amount, ctx)
 }
 
 // --- Public View Functions ---
