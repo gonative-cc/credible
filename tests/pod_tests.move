@@ -45,7 +45,7 @@ fun test_platform_initialization() {
         pod_exit_small_fee_pm,
         small_fee_duration,
         cancel_subscription_keep,
-    ) = pod::get_global_settings_pm(&settings);
+    ) = pod::get_global_settings(&settings);
 
     assert_u64_eq(max_immediate_unlock_pm, 80); // 8.0%
     assert_u64_eq(min_vesting_duration, DAY * 30 * 3); // 3 months
@@ -103,7 +103,7 @@ fun test_update_all_settings() {
         pod_exit_small_fee_pm,
         small_fee_duration,
         cancel_subscription_keep,
-    ) = pod::get_global_settings_pm(&settings);
+    ) = pod::get_global_settings(&settings);
 
     assert_u64_eq(max_immediate_unlock_pm, 100);
     assert_u64_eq(min_vesting_duration, DAY * 60);
@@ -145,7 +145,7 @@ fun test_update_individual_settings() {
     );
 
     // Verify only max_immediate_unlock changed
-    let (max_immediate_unlock_pm, _, _, pod_exit_fee_pm, _, _, _) = pod::get_global_settings_pm(
+    let (max_immediate_unlock_pm, _, _, pod_exit_fee_pm, _, _, _) = pod::get_global_settings(
         &settings,
     );
 

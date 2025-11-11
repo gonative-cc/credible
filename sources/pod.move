@@ -58,7 +58,7 @@ public struct PodAdminCap has key, store {
 }
 
 /// Represents an individual's investment in a pod.
-public struct InvestorAllocation has copy, drop, store {
+public struct InvestorRecord has copy, drop, store {
     invested: u64,
     allocation: u64,
     claimed_tokens: u64,
@@ -75,7 +75,7 @@ public struct Pod<phantom C, phantom T> has key {
     funds_vault: Balance<C>,
     total_raised: u64,
     total_allocated: u64,
-    investments: Table<address, InvestorAllocation>,
+    investments: Table<address, InvestorRecord>,
     founder_claimed_funds: u64,
     // Pod Parameters
     token_price: u64,
@@ -255,7 +255,7 @@ public fun create_pod<C, T>(
 
 // --- Public View Functions ---
 
-public fun get_global_settings_pm(settings: &GlobalSettings): (u64, u64, u64, u64, u64, u64, u64) {
+public fun get_global_settings(settings: &GlobalSettings): (u64, u64, u64, u64, u64, u64, u64) {
     (
         settings.max_immediate_unlock_pm,
         settings.min_vesting_duration,
@@ -300,9 +300,9 @@ public fun pod_status<C, T>(pod: &Pod<C, T>, clock: &Clock): u8 {
     }
 }
 
-/// returns Some(InvestorAllocation) for the investor if he invest in the pod.
+/// returns Some(InvestorRecord) for the investor if he invest in the pod.
 /// Otherwise returns None.
-public fun investor_record<C, T>(pod: &Pod<C, T>, investor: address): Option<InvestorAllocation> {
+public fun investor_record<C, T>(pod: &Pod<C, T>, investor: address): Option<InvestorRecord> {
     if (!pod.investments.contains(investor)) return option::none();
 
     option::some(pod.investments[investor])
@@ -345,7 +345,7 @@ public fun invest<C, T>(
         allocation.allocation = allocation.allocation + additional_tokens;
         allocation.invested
     } else {
-        let allocation = InvestorAllocation {
+        let allocation = InvestorRecord {
             invested: actual_investment,
             allocation: additional_tokens,
             claimed_tokens: 0,
