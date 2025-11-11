@@ -7,7 +7,7 @@ This file provides guidance to AI agents, when working with code in this reposit
 Beelievers Kickstarter is a decentralized crowdfunding and incubation platform with a token distribution mechanism, built on Sui blockchain. It's designed to launch and accelerate the next generation of innovative projects from _DeFi and beyond_.
 
 **Stack:** Sui blockchain, Sui Move programming language
-**Project specification:** @spec.md
+**Project specification:** @README.md
 
 ### Information about Sui and Sui Move
 
@@ -27,7 +27,7 @@ This is a Sui Move project
 ├── Move.toml     # project config file
 ├── sources
 │   └── pod.move  # main module implementation
-├── spec.md       # project specification
+├── README.md     # project specification
 └── tests
     └── pod_tests.move  # comprehensive test suite
 ```
@@ -40,7 +40,7 @@ The entire platform is implemented in a single Move module (`sources/pod.move`) 
 
 **Key Structs:**
 
-1. **`GlobalSettings`** (shared object): Platform-wide configuration, see "System Parameters" section in @spec.md for details.
+1. **`GlobalSettings`** (shared object): Platform-wide configuration, see "System Parameters" section in @README.md for details.
    These can be updated by `PlatformAdminCap` holder via `update_settings()`.
 
 2. **`Pod<C, T>`** (shared object): Generic crowdfunding campaign

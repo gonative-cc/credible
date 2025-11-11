@@ -14,7 +14,15 @@ Following the [Beelievers](https://www.gonative.cc/beelievers) mission:
 
 additional incentives are provided for BTCFi and dWallet projects.
 
-### The Problem: The BTCFi Funding Gap
+## Why
+
+### Problem 1: Launchpads Not Having Risks Mitigations
+
+ICOs are not only a new form of financing but also an example for the potential democratisation of finance, allowing retail to participate in the entrepreneurial fiance that was previously limited to “sophisticated” investors.
+
+Token launchpads have strayed from their original promise—empowering founders and protecting investors. Today, investors face high risks: rug pulls, unclear tokenomics, and locked capital. Founders struggle to access fair, sustainable funding.
+
+### Problem 2: The BTCFi Funding Gap
 
 Observation: Today, we don't have a vibrant Web3 Bitcoin ecosystem. BTC is used statically (holders) or for trading in various centralized exchanges or funds.
 Thesis: BTCFi to thrive needs a strong ecosystem of builders, users and investors.
