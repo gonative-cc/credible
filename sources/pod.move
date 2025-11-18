@@ -75,8 +75,8 @@ public struct Pod<phantom C, phantom T> has key {
     vesting_duration: u64,
     immediate_unlock_pm: u64,
     // Copied Fee Settings
-    pod_exit_fee_pm: u64,
-    pod_exit_small_fee_pm: u64,
+    exit_fee_pm: u64,
+    exit_small_fee_pm: u64,
     small_fee_duration: u64,
 }
 
@@ -88,8 +88,8 @@ public struct GlobalSettings has key {
     max_immediate_unlock_pm: u64,
     min_vesting_duration: u64,
     min_subscription_duration: u64,
-    pod_exit_fee_pm: u64,
-    pod_exit_small_fee_pm: u64,
+    exit_fee_pm: u64,
+    exit_small_fee_pm: u64,
     small_fee_duration: u64,
     cancel_subscription_keep: u64,
 }
@@ -99,8 +99,8 @@ public fun get_global_settings(settings: &GlobalSettings): (u64, u64, u64, u64, 
         settings.max_immediate_unlock_pm,
         settings.min_vesting_duration,
         settings.min_subscription_duration,
-        settings.pod_exit_fee_pm,
-        settings.pod_exit_small_fee_pm,
+        settings.exit_fee_pm,
+        settings.exit_small_fee_pm,
         settings.small_fee_duration,
         settings.cancel_subscription_keep,
     )
@@ -145,8 +145,8 @@ fun init(ctx: &mut TxContext) {
         max_immediate_unlock_pm: 100, // 10.0%
         min_vesting_duration: day * 30 * 3, // 3 months
         min_subscription_duration: day * 7,
-        pod_exit_fee_pm: 80, // 8.0%
-        pod_exit_small_fee_pm: 8, // 0.8%
+        exit_fee_pm: 80, // 8.0%
+        exit_small_fee_pm: 8, // 0.8%
         small_fee_duration: 1000 * 60 * 60 * 24 * 14, // 14 days
         cancel_subscription_keep: 1, // 0.1%
     };
@@ -163,8 +163,8 @@ public fun update_settings(
     max_immediate_unlock_pm: Option<u64>,
     min_vesting_duration: Option<u64>,
     min_subscription_duration: Option<u64>,
-    pod_exit_fee_pm: Option<u64>,
-    pod_exit_small_fee_pm: Option<u64>,
+    exit_fee_pm: Option<u64>,
+    exit_small_fee_pm: Option<u64>,
     small_fee_duration: Option<u64>,
     cancel_subscription_keep: Option<u64>,
     _ctx: &mut TxContext,
@@ -180,11 +180,11 @@ public fun update_settings(
     if (option::is_some(&min_subscription_duration)) {
         settings.min_subscription_duration = option::destroy_some(min_subscription_duration);
     };
-    if (option::is_some(&pod_exit_fee_pm)) {
-        settings.pod_exit_fee_pm = option::destroy_some(pod_exit_fee_pm);
+    if (option::is_some(&exit_fee_pm)) {
+        settings.exit_fee_pm = option::destroy_some(exit_fee_pm);
     };
-    if (option::is_some(&pod_exit_small_fee_pm)) {
-        settings.pod_exit_small_fee_pm = option::destroy_some(pod_exit_small_fee_pm);
+    if (option::is_some(&exit_small_fee_pm)) {
+        settings.exit_small_fee_pm = option::destroy_some(exit_small_fee_pm);
     };
     if (option::is_some(&small_fee_duration)) {
         settings.small_fee_duration = option::destroy_some(small_fee_duration);
@@ -250,8 +250,8 @@ public fun create_pod<C, T>(
         subscription_end,
         vesting_duration,
         immediate_unlock_pm,
-        pod_exit_fee_pm: settings.pod_exit_fee_pm,
-        pod_exit_small_fee_pm: settings.pod_exit_small_fee_pm,
+        exit_fee_pm: settings.exit_fee_pm,
+        exit_small_fee_pm: settings.exit_small_fee_pm,
         small_fee_duration: settings.small_fee_duration,
         total_raised: 0,
         total_allocated: 0,
@@ -455,9 +455,9 @@ public fun exit_investment<C, T>(
         ir.investmnet,
     );
     let fee_pm = if (clock.timestamp_ms() < pod.subscription_end + pod.small_fee_duration) {
-        pod.pod_exit_small_fee_pm
+        pod.exit_small_fee_pm
     } else {
-        pod.pod_exit_fee_pm
+        pod.exit_fee_pm
     };
 
     let remaining_investment = ir.investmnet - funds_unlocked;

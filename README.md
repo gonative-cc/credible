@@ -87,8 +87,8 @@ graph TD
 | `max_immediate_unlock`      | 10%      | Maximum % of funds team receives immediately after successful raise |
 | `min_vesting_duration`      | 3 months | Minimum vesting duration for a Pod                                  |
 | `min_subscription_duration` | 7 days   | Minimum subscription period duration                                |
-| `pod_exit_fee`              | 8%       | Standard exit fee after grace period                                |
-| `pod_exit_small_fee`        | 0.8%     | Reduced exit fee during grace period                                |
+| `exit_fee`                  | 8%       | Standard exit fee after grace period                                |
+| `exit_small_fee`            | 0.8%     | Reduced exit fee during grace period                                |
 | `small_fee_duration`        | 14 days  | Grace period with reduced exit fees                                 |
 | `cancel_subscription_keep`  | 0.1%     | Amount kept when investor cancels subscription                      |
 
@@ -142,8 +142,8 @@ Progress Update: Founders should provide regular progress updates through the li
 
 At any time, an investor can exit their investment if they believe the team is not meeting expectations or need liquidity:
 
-- If the exit occurs during `small_fee_duration` after vesting starts: `pod_exit_small_fee` is charged.
-- After `small_fee_duration`: the standard `pod_exit_fee` is charged.
+- If the exit occurs during `small_fee_duration` after vesting starts: `exit_small_fee` is charged.
+- After `small_fee_duration`: the standard `exit_fee` is charged.
 
 The exit fee protects the founders from a massive exit.
 
@@ -153,7 +153,7 @@ Let: `I` = Amount invested by the investor, `A` = token allocation for the inves
 The vested portion at time `T` is: `vested_portion = (T-Ts)/Vd`.
 
 ```
-fee = if(T <= Ts + small_fee_duration) pod_exit_small_fee  else  pod_exit_fee
+fee = if(T <= Ts + small_fee_duration) exit_small_fee  else  exit_fee
 claim_back = I × (1 - immediate_unlock) × (1 - vested_portion) × (1 - fee)
 tokens_received = A × (1 - immediate_unlock) × (1 - vested_portion)
 ```
