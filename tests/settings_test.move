@@ -41,9 +41,9 @@ fun test_platform_initialization() {
     assert_u64_eq(max_immediate_unlock_pm, 100); // 10.0%
     assert_u64_eq(min_vesting_duration, DAY * 30 * 3); // 3 months
     assert_u64_eq(min_subscription_duration, DAY * 7); // 7 days
-    assert_u64_eq(exit_fee_pm, 80); // 8.0%
+    assert_u64_eq(exit_fee_pm, 100); // 10.0%
     assert_u64_eq(exit_small_fee_pm, 8); // 0.8%
-    assert_u64_eq(small_fee_duration, DAY * 14); // 14 days
+    assert_u64_eq(small_fee_duration, DAY * 3); // 3 days
     assert_u64_eq(cancel_subscription_keep, 1); // 0.1%
     test_scenario::return_shared(settings);
 
@@ -141,7 +141,7 @@ fun test_update_individual_settings() {
     );
 
     assert_u64_eq(max_immediate_unlock_pm, 120);
-    assert_u64_eq(exit_fee_pm, 80); // unchanged
+    assert_u64_eq(exit_fee_pm, 100); // unchanged
 
     test_scenario::return_to_sender(&scenario, cap);
     test_scenario::return_shared(settings);

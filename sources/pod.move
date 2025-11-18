@@ -34,6 +34,27 @@ const E_NOTHING_TO_CLAIM: u64 = 12;
 const E_NOTHING_TO_EXIT: u64 = 13;
 const E_ZERO_INVESTMENT: u64 = 14;
 
+//
+// --- Module Initialization ---
+//
+fun init(ctx: &mut TxContext) {
+    let day = 1000 * 60 * 60 * 24;
+    let settings = GlobalSettings {
+        id: object::new(ctx),
+        max_immediate_unlock_pm: 100, // 10.0%
+        min_vesting_duration: day * 30 * 3, // 3 months
+        min_subscription_duration: day * 7,
+        exit_fee_pm: 100, // 10.0%
+        exit_small_fee_pm: 8, // 0.8%
+        small_fee_duration: 1000 * 60 * 60 * 24 * 3, // 3 days
+        cancel_subscription_keep: 1, // 0.1%
+    };
+    transfer::share_object(settings);
+
+    let admin_cap = PlatformAdminCap { id: object::new(ctx) };
+    transfer::public_transfer(admin_cap, tx_context::sender(ctx));
+}
+
 // --- Common Structs ---
 
 /// Capability for updating platform-wide settings.
@@ -106,56 +127,6 @@ public fun get_global_settings(settings: &GlobalSettings): (u64, u64, u64, u64, 
     )
 }
 
-//
-// --- Events ---
-//
-
-public struct EventPodCreated has copy, drop { pod_id: ID, founder: address }
-public struct EventInvestmentMade has copy, drop {
-    pod_id: ID,
-    investor: address,
-    total_investment: u64,
-}
-public struct EventPodMaxGoal has copy, drop { pod_id: ID }
-public struct EventSubscriptionCancelled has copy, drop {
-    pod_id: ID,
-    investor: address,
-    refunded: u64,
-    investmnet: u64,
-    allocation: u64,
-}
-public struct EventSettingsUpdated has copy, drop {}
-public struct EventUnallocatedTokensWithdrawn has copy, drop { pod_id: ID, amount: u64 }
-public struct EventExitInvestment has copy, drop {
-    pod_id: ID,
-    investor: address,
-    total_investment: u64,
-    total_allocation: u64,
-}
-public struct EventInvestorClaim has copy, drop { pod_id: ID, investor: address, total_amount: u64 }
-public struct EventFounderClaim has copy, drop { pod_id: ID, total_amount: u64 }
-public struct EventFailedPodRefund has copy, drop { pod_id: ID, investor: address }
-public struct EventFailedPodWithdraw has copy, drop { pod_id: ID }
-
-// --- Module Initialization ---
-fun init(ctx: &mut TxContext) {
-    let day = 1000 * 60 * 60 * 24;
-    let settings = GlobalSettings {
-        id: object::new(ctx),
-        max_immediate_unlock_pm: 100, // 10.0%
-        min_vesting_duration: day * 30 * 3, // 3 months
-        min_subscription_duration: day * 7,
-        exit_fee_pm: 80, // 8.0%
-        exit_small_fee_pm: 8, // 0.8%
-        small_fee_duration: 1000 * 60 * 60 * 24 * 14, // 14 days
-        cancel_subscription_keep: 1, // 0.1%
-    };
-    transfer::share_object(settings);
-
-    let admin_cap = PlatformAdminCap { id: object::new(ctx) };
-    transfer::public_transfer(admin_cap, tx_context::sender(ctx));
-}
-
 // --- Platform Admin Functions ---
 public fun update_settings(
     _cap: &PlatformAdminCap,
@@ -194,6 +165,37 @@ public fun update_settings(
     };
     emit(EventSettingsUpdated {});
 }
+
+//
+// --- Events ---
+//
+
+public struct EventPodCreated has copy, drop { pod_id: ID, founder: address }
+public struct EventInvestmentMade has copy, drop {
+    pod_id: ID,
+    investor: address,
+    total_investment: u64,
+}
+public struct EventPodMaxGoal has copy, drop { pod_id: ID }
+public struct EventSubscriptionCancelled has copy, drop {
+    pod_id: ID,
+    investor: address,
+    refunded: u64,
+    investmnet: u64,
+    allocation: u64,
+}
+public struct EventSettingsUpdated has copy, drop {}
+public struct EventUnallocatedTokensWithdrawn has copy, drop { pod_id: ID, amount: u64 }
+public struct EventExitInvestment has copy, drop {
+    pod_id: ID,
+    investor: address,
+    total_investment: u64,
+    total_allocation: u64,
+}
+public struct EventInvestorClaim has copy, drop { pod_id: ID, investor: address, total_amount: u64 }
+public struct EventFounderClaim has copy, drop { pod_id: ID, total_amount: u64 }
+public struct EventFailedPodRefund has copy, drop { pod_id: ID, investor: address }
+public struct EventFailedPodWithdraw has copy, drop { pod_id: ID }
 
 //
 // --- Pod Creation and Management ---

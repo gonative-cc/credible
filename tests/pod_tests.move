@@ -701,7 +701,7 @@ fun test_exit_after_small_fee_period() {
     transfer::public_transfer(excess, @0x0);
     test_scenario::return_shared(pod);
 
-    // Fast forward past small fee period (14 days after vesting)
+    // Fast forward past small fee period (3 days after vesting)
     clock.increment_for_testing(DAY * 7 + DAY * 15);
 
     // Investor exits after small fee period
@@ -712,7 +712,7 @@ fun test_exit_after_small_fee_period() {
         scenario.ctx(),
     );
 
-    // Should get refund with standard 8% fee
+    // Should get refund with standard 10% fee
     assert!(refund.value() > 0);
     transfer::public_transfer(refund, @0x0);
     transfer::public_transfer(vested_tokens, @0x0);
