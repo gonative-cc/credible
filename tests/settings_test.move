@@ -13,6 +13,48 @@ fun assert_u64_eq(a: u64, b: u64) {
 }
 
 // ================================
+// Platform Initialization Tests
+// ================================
+
+#[test]
+fun test_platform_initialization() {
+    let owner = @0x1;
+    let mut scenario = test_scenario::begin(owner);
+    let ctx = ctx(&mut scenario);
+
+    // Initialize module
+    pod::init_for_tests(ctx);
+    next_tx(&mut scenario, owner);
+
+    // Verify GlobalSettings was created with correct defaults
+    let settings = scenario.take_shared<GlobalSettings>();
+    let (
+        max_immediate_unlock_pm,
+        min_vesting_duration,
+        min_subscription_duration,
+        pod_exit_fee_pm,
+        pod_exit_small_fee_pm,
+        small_fee_duration,
+        cancel_subscription_keep,
+    ) = pod::get_global_settings(&settings);
+
+    assert_u64_eq(max_immediate_unlock_pm, 100); // 10.0%
+    assert_u64_eq(min_vesting_duration, DAY * 30 * 3); // 3 months
+    assert_u64_eq(min_subscription_duration, DAY * 7); // 7 days
+    assert_u64_eq(pod_exit_fee_pm, 80); // 8.0%
+    assert_u64_eq(pod_exit_small_fee_pm, 8); // 0.8%
+    assert_u64_eq(small_fee_duration, DAY * 14); // 14 days
+    assert_u64_eq(cancel_subscription_keep, 1); // 0.1%
+    test_scenario::return_shared(settings);
+
+    // Verify PlatformAdminCap was created
+    let admin_cap = scenario.take_from_sender<PlatformAdminCap>();
+    test_scenario::return_to_sender(&scenario, admin_cap);
+
+    test_scenario::end(scenario);
+}
+
+// ================================
 // Settings Update Tests
 // ================================
 
