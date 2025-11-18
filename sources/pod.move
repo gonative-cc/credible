@@ -142,7 +142,7 @@ fun init(ctx: &mut TxContext) {
     let day = 1000 * 60 * 60 * 24;
     let settings = GlobalSettings {
         id: object::new(ctx),
-        max_immediate_unlock_pm: 80, // 8.0%
+        max_immediate_unlock_pm: 100, // 10.0%
         min_vesting_duration: day * 30 * 3, // 3 months
         min_subscription_duration: day * 7,
         pod_exit_fee_pm: 80, // 8.0%

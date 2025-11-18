@@ -96,7 +96,7 @@ fun test_platform_initialization() {
         cancel_subscription_keep,
     ) = pod::get_global_settings(&settings);
 
-    assert_u64_eq(max_immediate_unlock_pm, 80); // 8.0%
+    assert_u64_eq(max_immediate_unlock_pm, 100); // 10.0%
     assert_u64_eq(min_vesting_duration, DAY * 30 * 3); // 3 months
     assert_u64_eq(min_subscription_duration, DAY * 7); // 7 days
     assert_u64_eq(pod_exit_fee_pm, 80); // 8.0%
@@ -478,7 +478,7 @@ fun test_create_pod_immediate_unlock_too_high() {
         clock.timestamp_ms() + HOUR,
         DAY * 7,
         DAY * 365,
-        100, // 10% > 8% max (should fail)
+        110, // 11% > 10% max (should fail)
         tokens,
         &clock,
         ctx(&mut scenario),
