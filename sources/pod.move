@@ -34,22 +34,10 @@ const E_NOTHING_TO_CLAIM: u64 = 12;
 const E_NOTHING_TO_EXIT: u64 = 13;
 const E_ZERO_INVESTMENT: u64 = 14;
 
-// --- Structs ---
+// --- Common Structs ---
 
 /// Capability for updating platform-wide settings.
 public struct PlatformAdminCap has key, store { id: UID }
-
-/// Shared object containing all platform parameters.
-public struct GlobalSettings has key {
-    id: UID,
-    max_immediate_unlock_pm: u64,
-    min_vesting_duration: u64,
-    min_subscription_duration: u64,
-    pod_exit_fee_pm: u64,
-    pod_exit_small_fee_pm: u64,
-    small_fee_duration: u64,
-    cancel_subscription_keep: u64,
-}
 
 /// Capability for the project team to manage their pod.
 public struct PodAdminCap has key, store {
@@ -90,6 +78,32 @@ public struct Pod<phantom C, phantom T> has key {
     pod_exit_fee_pm: u64,
     pod_exit_small_fee_pm: u64,
     small_fee_duration: u64,
+}
+
+// --- Settings Structs ---
+
+/// Shared object containing all platform parameters.
+public struct GlobalSettings has key {
+    id: UID,
+    max_immediate_unlock_pm: u64,
+    min_vesting_duration: u64,
+    min_subscription_duration: u64,
+    pod_exit_fee_pm: u64,
+    pod_exit_small_fee_pm: u64,
+    small_fee_duration: u64,
+    cancel_subscription_keep: u64,
+}
+
+public fun get_global_settings(settings: &GlobalSettings): (u64, u64, u64, u64, u64, u64, u64) {
+    (
+        settings.max_immediate_unlock_pm,
+        settings.min_vesting_duration,
+        settings.min_subscription_duration,
+        settings.pod_exit_fee_pm,
+        settings.pod_exit_small_fee_pm,
+        settings.small_fee_duration,
+        settings.cancel_subscription_keep,
+    )
 }
 
 //
@@ -254,18 +268,6 @@ public fun create_pod<C, T>(
 }
 
 // --- Public View Functions ---
-
-public fun get_global_settings(settings: &GlobalSettings): (u64, u64, u64, u64, u64, u64, u64) {
-    (
-        settings.max_immediate_unlock_pm,
-        settings.min_vesting_duration,
-        settings.min_subscription_duration,
-        settings.pod_exit_fee_pm,
-        settings.pod_exit_small_fee_pm,
-        settings.small_fee_duration,
-        settings.cancel_subscription_keep,
-    )
-}
 
 public fun get_pod_params<C, T>(pod: &Pod<C, T>): (u64, u64, u64, u64, u64, u64, u64, u64, u64) {
     (
