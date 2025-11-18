@@ -75,6 +75,7 @@ fun init_t(
     let subscription_start = clock.timestamp_ms() + MINUTE;
     let tokens = mint_for_testing<SUI>(required_tokens, scenario.ctx());
     let settings = scenario.take_shared<GlobalSettings>();
+    let setup_fee = mint_for_testing<SUI>(5_000_000_000, scenario.ctx()); // 5 SUI
 
     create_pod<SUI, SUI>(
         &settings,
@@ -90,6 +91,7 @@ fun init_t(
         vesting_dur,
         immediate_unlock_pm,
         tokens,
+        setup_fee,
         &clock,
         scenario.ctx(),
     );

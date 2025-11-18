@@ -55,8 +55,7 @@ BTCFi ecosystem face a critical bottleneck:
 
 ```mermaid
 graph TD
-    A[Founders create Pod] --> B[Founders supply tokens]
-    B --> C[Subscription phase begins]
+    A[Founders create Pod<br>supply tokens and pays the fee] --> C[Subscription phase begins]
     C --> D{Min goal reached?}
     D -->|No| E[Pod ends - refunds issued]
     D -->|Yes| F{Max goal reached?}
@@ -90,6 +89,8 @@ graph TD
 | `exit_small_fee`            | 0.8%     | Reduced exit fee during grace period                                                                           |
 | `small_fee_duration`        | 3 days   | Grace period with reduced exit fees                                                                            |
 | `cancel_subscription_keep`  | 0.1%     | Amount kept when investor cancels subscription                                                                 |
+| `setup_fee`                 | 5 SUI    | Setup fee charged to pod creators                                                                              |
+| `treasury`                  | -        | Address where setup fees are sent                                                                              |
 
 ### Phase 1: Pod Creation
 
@@ -104,6 +105,7 @@ Founders create a `Pod` and:
    - `min_investment_goal` and `max_investment_goal` (e.g., min=100k USDC, max=200k USDC).
    - `price_multiplier`- allows scaling the price: `token_allocation = investment_amount × price_multiplier / token_price`.
 1. supply tokens to the `Pod`. The amount must equal `max_investment_goal / token_price`.
+1. supply `setup_fee` SUI.
 1. attach a pitch deck and business plan.
 1. link a forum/discourse thread for community discussion.
 

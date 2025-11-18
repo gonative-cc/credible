@@ -6,6 +6,7 @@ use sui::balance::{Self, Balance};
 use sui::clock::{Self, Clock};
 use sui::coin::{Self, Coin};
 use sui::event::emit;
+use sui::sui::SUI;
 use sui::table::{Self, Table};
 use sui::url::{Self, Url};
 
@@ -29,6 +30,7 @@ const E_INVESTMENT_NOT_FOUND: u64 = 6;
 const E_INVESTMENT_CANCELLED: u64 = 7;
 const E_ALREADY_EXITED: u64 = 8;
 const E_MAX_GOAL_REACHED: u64 = 9;
+const E_NO_SETUP_FEE: u64 = 10;
 const E_INVALID_TOKEN_SUPPLY: u64 = 11;
 const E_NOTHING_TO_CLAIM: u64 = 12;
 const E_NOTHING_TO_EXIT: u64 = 13;
@@ -47,6 +49,8 @@ fun init(ctx: &mut TxContext) {
         exit_small_fee_pm: 8, // 0.8%
         small_fee_duration: 1000 * 60 * 60 * 24 * 3, // 3 days
         cancel_subscription_keep: 1, // 0.1%
+        setup_fee: 5_000_000_000, // 5 SUI
+        treasury: tx_context::sender(ctx),
     };
     transfer::share_object(settings);
 
@@ -113,9 +117,13 @@ public struct GlobalSettings has key {
     exit_small_fee_pm: u64,
     small_fee_duration: u64,
     cancel_subscription_keep: u64,
+    setup_fee: u64,
+    treasury: address,
 }
 
-public fun get_global_settings(settings: &GlobalSettings): (u64, u64, u64, u64, u64, u64) {
+public fun get_global_settings(
+    settings: &GlobalSettings,
+): (u64, u64, u64, u64, u64, u64, u64, address) {
     (
         settings.max_immediate_unlock_pm,
         settings.min_vesting_duration,
@@ -123,6 +131,8 @@ public fun get_global_settings(settings: &GlobalSettings): (u64, u64, u64, u64, 
         settings.exit_small_fee_pm,
         settings.small_fee_duration,
         settings.cancel_subscription_keep,
+        settings.setup_fee,
+        settings.treasury,
     )
 }
 
@@ -136,6 +146,8 @@ public fun update_settings(
     exit_small_fee_pm: Option<u64>,
     small_fee_duration: Option<u64>,
     cancel_subscription_keep: Option<u64>,
+    setup_fee: Option<u64>,
+    treasury: Option<address>,
     _ctx: &mut TxContext,
 ) {
     if (option::is_some(&max_immediate_unlock_pm)) {
@@ -158,6 +170,12 @@ public fun update_settings(
     };
     if (option::is_some(&cancel_subscription_keep)) {
         settings.cancel_subscription_keep = option::destroy_some(cancel_subscription_keep);
+    };
+    if (option::is_some(&setup_fee)) {
+        settings.setup_fee = option::destroy_some(setup_fee);
+    };
+    if (option::is_some(&treasury)) {
+        settings.treasury = option::destroy_some(treasury);
     };
     emit(EventSettingsUpdated {});
 }
@@ -212,6 +230,7 @@ public fun create_pod<C, T>(
     vesting_duration: u64,
     immediate_unlock_pm: u64,
     tokens: Coin<T>,
+    setup_fee: Coin<SUI>,
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
@@ -231,6 +250,10 @@ public fun create_pod<C, T>(
     let required_tokens = (max_goal * price_multiplier) / token_price;
     let supplied_amount = tokens.value();
     assert!(supplied_amount == required_tokens, E_INVALID_TOKEN_SUPPLY);
+
+    // Check and charge setup fee
+    assert!(setup_fee.value() == settings.setup_fee, E_NO_SETUP_FEE);
+    transfer::public_transfer(setup_fee, settings.treasury);
 
     let params = PodParams {
         token_price,
