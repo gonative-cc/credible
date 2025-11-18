@@ -16,7 +16,6 @@ Beelievers Kickstarter is a decentralized crowdfunding and incubation platform w
 - Integrating with Sui through CLI: https://docs.sui.io/references/cli/cheatsheet
 - Integration and Scripting with Typescrip: https://sdk.mystenlabs.com/typescript
 
-
 ## Repository Structure
 
 This is a Sui Move project
@@ -31,6 +30,8 @@ This is a Sui Move project
 └── tests
     └── pod_tests.move  # comprehensive test suite
 ```
+
+Files in the `private` directory should be ignored.
 
 ## Code Architecture
 
