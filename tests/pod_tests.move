@@ -1,16 +1,21 @@
 #[allow(unused_let_mut)]
 module beelievers_kickstarter::pod_tests;
 
-use beelievers_kickstarter::pod::{Self, GlobalSettings, PlatformAdminCap};
+use beelievers_kickstarter::pod::{Self, GlobalSettings, PlatformAdminCap, Pod};
 use std::ascii;
-use sui::clock;
+use sui::clock::{Self, Clock};
 use sui::coin::mint_for_testing;
 use sui::sui::SUI;
-use sui::test_scenario::{Self, next_tx, ctx};
+use sui::test_scenario::{Self, Scenario, next_tx, ctx};
 
-const DAY: u64 = 1000 * 60 * 60 * 24;
-const HOUR: u64 = 1000 * 60 * 60;
+const DAY: u64 = HOUR * 24;
+const HOUR: u64 = MINUTE * 60;
 const MINUTE: u64 = 1000 * 60;
+
+const TOKEN_PRICE: u64 = 100;
+const PRICE_MULTIPLIER: u64 = 10;
+const MIN_GOAL: u64 = 800_000;
+const MAX_GOAL: u64 = 1_000_000;
 
 // Helper functions for assertions
 fun assert_u64_eq(a: u64, b: u64) {
@@ -19,6 +24,50 @@ fun assert_u64_eq(a: u64, b: u64) {
 
 fun assert_u8_eq(a: u8, b: u8) {
     assert!(a == b, 0);
+}
+
+/// creates Pod<SUI, SUI>
+fun init1(owner: address): (Scenario, Clock, GlobalSettings) {
+    let mut scenario = test_scenario::begin(owner);
+    let mut clock = sui::clock::create_for_testing(scenario.ctx());
+
+    // Initialize
+    pod::init_for_tests(scenario.ctx());
+    next_tx(&mut scenario, owner);
+
+    let subscription_start = clock.timestamp_ms() + MINUTE;
+    let vesting_duration = DAY * 365;
+    let immediate_unlock_pm = 80;
+
+    let required_tokens = (MAX_GOAL * PRICE_MULTIPLIER) / TOKEN_PRICE;
+    let tokens = mint_for_testing<SUI>(required_tokens, scenario.ctx());
+    let settings = scenario.take_shared<GlobalSettings>();
+
+    pod::create_pod<SUI, SUI>(
+        &settings,
+        b"My Project".to_string(),
+        b"Great project".to_string(),
+        ascii::string(b"https://forum.example.com"),
+        TOKEN_PRICE,
+        PRICE_MULTIPLIER,
+        MIN_GOAL,
+        MAX_GOAL,
+        subscription_start,
+        DAY * 7,
+        vesting_duration,
+        immediate_unlock_pm,
+        tokens,
+        &clock,
+        ctx(&mut scenario),
+    );
+
+    (scenario, clock, settings)
+}
+
+fun cleanup<C, T>(c: Clock, pod: Pod<C, T>, settings: GlobalSettings) {
+    test_scenario::return_shared(settings);
+    test_scenario::return_shared(pod);
+    c.destroy_for_testing();
 }
 
 // ================================
@@ -196,47 +245,12 @@ fun test_update_settings_zero_vesting_duration() {
 #[test]
 fun test_create_pod_success() {
     let owner = @0x1;
-    let mut scenario = test_scenario::begin(owner);
-    let ctx = ctx(&mut scenario);
 
     // Initialize
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, owner);
+    let (mut scenario, clock, mut settings) = init1(owner);
 
-    let settings = scenario.take_shared<GlobalSettings>();
-    let mut clock = sui::clock::create_for_testing(ctx(&mut scenario));
-
-    // Calculate required tokens
-    let token_price = 100;
-    let price_multiplier = 10;
-    let max_goal = 1_000_000;
-    let required_tokens = (max_goal * price_multiplier) / token_price;
-
-    // Mint tokens for the pod
-    let tokens = mint_for_testing(required_tokens, ctx(&mut scenario));
-
-    let subscription_start = clock.timestamp_ms() + HOUR;
     let vesting_duration = DAY * 365;
     let immediate_unlock_pm = 80;
-
-    // Create pod
-    pod::create_pod<SUI, SUI>(
-        &settings,
-        b"My Project".to_string(),
-        b"Great project".to_string(),
-        ascii::string(b"https://forum.example.com"),
-        token_price,
-        price_multiplier,
-        500_000,
-        max_goal,
-        subscription_start,
-        DAY * 7,
-        vesting_duration,
-        immediate_unlock_pm,
-        tokens,
-        &clock,
-        ctx(&mut scenario),
-    );
 
     // Start new transaction to access created pod
     next_tx(&mut scenario, owner);
@@ -256,19 +270,17 @@ fun test_create_pod_success() {
         pod_immediate_unlock_pm,
         _,
     ) = pod::get_pod_params(&pod);
-
-    assert_u64_eq(pod_token_price, token_price);
-    assert_u64_eq(pod_price_multiplier, price_multiplier);
-    assert_u64_eq(pod_min_goal, 500_000);
-    assert_u64_eq(pod_max_goal, max_goal);
+    assert_u64_eq(pod_token_price, TOKEN_PRICE);
+    assert_u64_eq(pod_price_multiplier, PRICE_MULTIPLIER);
+    assert_u64_eq(pod_min_goal, MIN_GOAL);
+    assert_u64_eq(pod_max_goal, MAX_GOAL);
     assert_u64_eq(pod_vesting_duration, vesting_duration);
-    assert_u64_eq(pod_immediate_unlock_pm, 80);
+    assert_u64_eq(pod_immediate_unlock_pm, immediate_unlock_pm);
 
     test_scenario::return_to_sender(&scenario, cap);
-    test_scenario::return_shared(pod);
-    test_scenario::return_shared(settings);
-    sui::clock::destroy_for_testing(clock);
-    test_scenario::end(scenario);
+
+    cleanup(clock, pod, settings);
+    scenario.end();
 }
 
 #[test]
@@ -530,40 +542,7 @@ fun test_successful_investment() {
     let founder = @0x1;
     let investor = @0x2;
 
-    let mut scenario = test_scenario::begin(founder);
-    let ctx = ctx(&mut scenario);
-
-    // Setup: founder creates pod
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, founder);
-
-    let settings = scenario.take_shared<GlobalSettings>();
-    let mut clock = sui::clock::create_for_testing(ctx(&mut scenario));
-
-    let token_price = 100;
-    let price_multiplier = 10;
-    let max_goal = 1_000_000;
-    let required_tokens = (max_goal * price_multiplier) / token_price;
-    let tokens = mint_for_testing(required_tokens, ctx(&mut scenario));
-
-    let subscription_start = clock.timestamp_ms() + MINUTE;
-    pod::create_pod<SUI, SUI>(
-        &settings,
-        b"Test".to_string(),
-        b"Test".to_string(),
-        ascii::string(b"https://example.com"),
-        token_price,
-        price_multiplier,
-        500_000,
-        max_goal,
-        subscription_start,
-        DAY * 7,
-        DAY * 365,
-        80,
-        tokens,
-        &clock,
-        ctx(&mut scenario),
-    );
+    let (mut scenario, mut clock, settings) = init1(founder);
 
     // Fast forward to subscription period
     next_tx(&mut scenario, founder);
@@ -580,12 +559,10 @@ fun test_successful_investment() {
     transfer::public_transfer(excess, @0x0);
 
     // Verify investment was recorded
-    assert_u64_eq(pod::pod_total_allocated(&pod), (100_000 * price_multiplier) / token_price);
+    assert_u64_eq(pod::pod_total_allocated(&pod), (100_000 * PRICE_MULTIPLIER) / TOKEN_PRICE);
 
-    test_scenario::return_shared(pod);
-    test_scenario::return_shared(settings);
-    sui::clock::destroy_for_testing(clock);
-    test_scenario::end(scenario);
+    cleanup(clock, pod, settings);
+    scenario.end();
 }
 
 #[test]
@@ -594,38 +571,7 @@ fun test_invest_before_subscription() {
     let founder = @0x1;
     let investor = @0x2;
 
-    let mut scenario = test_scenario::begin(founder);
-    let ctx = ctx(&mut scenario);
-
-    // Setup
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, founder);
-
-    let settings = scenario.take_shared<GlobalSettings>();
-    let mut clock = sui::clock::create_for_testing(ctx(&mut scenario));
-
-    let token_price = 100;
-    let required_tokens = (1_000_000 * 10) / token_price;
-    let tokens = mint_for_testing(required_tokens, ctx(&mut scenario));
-
-    let subscription_start = clock.timestamp_ms() + HOUR;
-    pod::create_pod<SUI, SUI>(
-        &settings,
-        b"Test".to_string(),
-        b"Test".to_string(),
-        ascii::string(b"https://example.com"),
-        token_price,
-        10,
-        500_000,
-        1_000_000,
-        subscription_start,
-        DAY * 7,
-        DAY * 365,
-        80,
-        tokens,
-        &clock,
-        ctx(&mut scenario),
-    );
+    let (mut scenario, clock, settings) = init1(founder);
 
     // Try to invest before subscription starts (should fail)
     next_tx(&mut scenario, investor);
@@ -634,10 +580,8 @@ fun test_invest_before_subscription() {
     let _excess = pod::invest<SUI, SUI>(&mut pod, investment, &clock, ctx(&mut scenario));
     transfer::public_transfer(_excess, @0x0);
 
-    test_scenario::return_shared(pod);
-    test_scenario::return_shared(settings);
-    sui::clock::destroy_for_testing(clock);
-    test_scenario::end(scenario);
+    cleanup(clock, pod, settings);
+    scenario.end();
 }
 
 #[test]
@@ -646,39 +590,7 @@ fun test_max_goal_reached_early() {
     let investor1 = @0x2;
     let investor2 = @0x3;
 
-    let mut scenario = test_scenario::begin(founder);
-    let ctx = ctx(&mut scenario);
-
-    // Setup
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, founder);
-
-    let settings = scenario.take_shared<GlobalSettings>();
-    let mut clock = sui::clock::create_for_testing(ctx(&mut scenario));
-
-    let token_price = 100;
-    let price_multiplier = 10;
-    let max_goal = 1_000_000;
-    let required_tokens = (max_goal * price_multiplier) / token_price;
-    let tokens = mint_for_testing(required_tokens, ctx(&mut scenario));
-
-    pod::create_pod<SUI, SUI>(
-        &settings,
-        b"Test".to_string(),
-        b"Test".to_string(),
-        ascii::string(b"https://example.com"),
-        token_price,
-        price_multiplier,
-        500_000,
-        max_goal,
-        clock.timestamp_ms() + MINUTE,
-        DAY * 7,
-        DAY * 365,
-        80,
-        tokens,
-        &clock,
-        ctx(&mut scenario),
-    );
+    let (mut scenario, mut clock, settings) = init1(founder);
 
     // Fast forward
     next_tx(&mut scenario, founder);
@@ -702,14 +614,12 @@ fun test_max_goal_reached_early() {
     // Should have 100_000 excess
     assert_u64_eq(excess2.value(), 100_000);
     let (_, _, _, _, _, pod_subscription_end, _, _, pod_total_raised) = pod::get_pod_params(&pod);
-    assert_u64_eq(pod_total_raised, max_goal);
+    assert_u64_eq(pod_total_raised, MAX_GOAL);
     assert_u64_eq(pod_subscription_end, clock.timestamp_ms());
     transfer::public_transfer(excess2, @0x0);
 
-    test_scenario::return_shared(pod);
-    test_scenario::return_shared(settings);
-    sui::clock::destroy_for_testing(clock);
-    test_scenario::end(scenario);
+    cleanup(clock, pod, settings);
+    scenario.end();
 }
 
 #[test]
@@ -719,39 +629,7 @@ fun test_invest_after_max_goal() {
     let investor1 = @0x2;
     let investor2 = @0x3;
 
-    let mut scenario = test_scenario::begin(founder);
-    let ctx = ctx(&mut scenario);
-
-    // Setup
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, founder);
-
-    let settings = scenario.take_shared<GlobalSettings>();
-    let mut clock = sui::clock::create_for_testing(ctx(&mut scenario));
-
-    let token_price = 100;
-    let price_multiplier = 10;
-    let max_goal = 1_000_000;
-    let required_tokens = (max_goal * price_multiplier) / token_price;
-    let tokens = mint_for_testing(required_tokens, ctx(&mut scenario));
-
-    pod::create_pod<SUI, SUI>(
-        &settings,
-        b"Test".to_string(),
-        b"Test".to_string(),
-        ascii::string(b"https://example.com"),
-        token_price,
-        price_multiplier,
-        500_000,
-        max_goal,
-        clock.timestamp_ms() + MINUTE,
-        DAY * 7,
-        DAY * 365,
-        80,
-        tokens,
-        &clock,
-        ctx(&mut scenario),
-    );
+    let (mut scenario, mut clock, settings) = init1(founder);
 
     // Fast forward
     next_tx(&mut scenario, founder);
@@ -772,10 +650,8 @@ fun test_invest_after_max_goal() {
     let _excess = pod::invest<SUI, SUI>(&mut pod, investment2, &clock, ctx(&mut scenario));
     transfer::public_transfer(_excess, @0x0);
 
-    test_scenario::return_shared(pod);
-    test_scenario::return_shared(settings);
-    sui::clock::destroy_for_testing(clock);
-    test_scenario::end(scenario);
+    cleanup(clock, pod, settings);
+    scenario.end();
 }
 
 #[test]
@@ -783,38 +659,7 @@ fun test_multiple_investments_same_investor() {
     let founder = @0x1;
     let investor = @0x2;
 
-    let mut scenario = test_scenario::begin(founder);
-    let ctx = ctx(&mut scenario);
-
-    // Setup
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, founder);
-
-    let settings = scenario.take_shared<GlobalSettings>();
-    let mut clock = sui::clock::create_for_testing(ctx(&mut scenario));
-
-    let token_price = 100;
-    let price_multiplier = 10;
-    let required_tokens = (1_000_000 * price_multiplier) / token_price;
-    let tokens = mint_for_testing(required_tokens, ctx(&mut scenario));
-
-    pod::create_pod<SUI, SUI>(
-        &settings,
-        b"Test".to_string(),
-        b"Test".to_string(),
-        ascii::string(b"https://example.com"),
-        token_price,
-        price_multiplier,
-        500_000,
-        1_000_000,
-        clock.timestamp_ms() + MINUTE,
-        DAY * 7,
-        DAY * 365,
-        80,
-        tokens,
-        &clock,
-        ctx(&mut scenario),
-    );
+    let (mut scenario, mut clock, settings) = init1(founder);
 
     // Fast forward
     next_tx(&mut scenario, founder);
@@ -839,10 +684,8 @@ fun test_multiple_investments_same_investor() {
     let (_, _, _, _, _, _, _, _, pod_total_raised) = pod::get_pod_params(&pod);
     assert_u64_eq(pod_total_raised, 150_000);
 
-    test_scenario::return_shared(pod);
-    test_scenario::return_shared(settings);
-    sui::clock::destroy_for_testing(clock);
-    test_scenario::end(scenario);
+    cleanup(clock, pod, settings);
+    scenario.end();
 }
 
 #[test]
@@ -850,38 +693,7 @@ fun test_cancel_subscription() {
     let founder = @0x1;
     let investor = @0x2;
 
-    let mut scenario = test_scenario::begin(founder);
-    let ctx = ctx(&mut scenario);
-
-    // Setup
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, founder);
-
-    let settings = scenario.take_shared<GlobalSettings>();
-    let mut clock = sui::clock::create_for_testing(ctx(&mut scenario));
-
-    let token_price = 100;
-    let price_multiplier = 10;
-    let required_tokens = (1_000_000 * price_multiplier) / token_price;
-    let tokens = mint_for_testing(required_tokens, ctx(&mut scenario));
-
-    pod::create_pod<SUI, SUI>(
-        &settings,
-        b"Test".to_string(),
-        b"Test".to_string(),
-        ascii::string(b"https://example.com"),
-        token_price,
-        price_multiplier,
-        500_000,
-        1_000_000,
-        clock.timestamp_ms() + MINUTE,
-        DAY * 7,
-        DAY * 365,
-        80,
-        tokens,
-        &clock,
-        ctx(&mut scenario),
-    );
+    let (mut scenario, mut clock, settings) = init1(founder);
 
     // Fast forward
     next_tx(&mut scenario, founder);
@@ -912,10 +724,8 @@ fun test_cancel_subscription() {
     let (_, _, _, _, _, _, _, _, pod_total_raised) = pod::get_pod_params(&pod);
     assert_u64_eq(pod_total_raised, kept);
 
-    test_scenario::return_shared(pod);
-    test_scenario::return_shared(settings);
-    sui::clock::destroy_for_testing(clock);
-    test_scenario::end(scenario);
+    cleanup(clock, pod, settings);
+    scenario.end();
 }
 
 #[test]
@@ -924,38 +734,7 @@ fun test_cancel_subscription_only_once() {
     let founder = @0x1;
     let investor = @0x2;
 
-    let mut scenario = test_scenario::begin(founder);
-    let ctx = ctx(&mut scenario);
-
-    // Setup
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, founder);
-
-    let settings = scenario.take_shared<GlobalSettings>();
-    let mut clock = sui::clock::create_for_testing(ctx(&mut scenario));
-
-    let token_price = 100;
-    let price_multiplier = 10;
-    let required_tokens = (1_000_000 * price_multiplier) / token_price;
-    let tokens = mint_for_testing(required_tokens, ctx(&mut scenario));
-
-    pod::create_pod<SUI, SUI>(
-        &settings,
-        b"Test".to_string(),
-        b"Test".to_string(),
-        ascii::string(b"https://example.com"),
-        token_price,
-        price_multiplier,
-        500_000,
-        1_000_000,
-        clock.timestamp_ms() + MINUTE,
-        DAY * 7,
-        DAY * 365,
-        80,
-        tokens,
-        &clock,
-        ctx(&mut scenario),
-    );
+    let (mut scenario, mut clock, settings) = init1(founder);
 
     // Fast forward
     next_tx(&mut scenario, founder);
@@ -987,10 +766,8 @@ fun test_cancel_subscription_only_once() {
     );
     transfer::public_transfer(_refund2, @0x0);
 
-    test_scenario::return_shared(pod);
-    test_scenario::return_shared(settings);
-    sui::clock::destroy_for_testing(clock);
-    test_scenario::end(scenario);
+    cleanup(clock, pod, settings);
+    scenario.end();
 }
 
 // ================================
@@ -1040,40 +817,7 @@ fun test_investor_claim_tokens() {
     let founder = @0x1;
     let investor = @0x2;
 
-    let mut scenario = test_scenario::begin(founder);
-    let ctx = ctx(&mut scenario);
-
-    // Setup: create pod and complete subscription
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, founder);
-
-    let settings = scenario.take_shared<GlobalSettings>();
-    let mut clock = sui::clock::create_for_testing(ctx(&mut scenario));
-
-    let token_price = 100;
-    let price_multiplier = 10;
-    let max_goal = 1_000_000;
-    let required_tokens = (max_goal * price_multiplier) / token_price;
-    let tokens = mint_for_testing(required_tokens, ctx(&mut scenario));
-
-    let subscription_start = clock.timestamp_ms() + MINUTE;
-    pod::create_pod<SUI, SUI>(
-        &settings,
-        b"Test".to_string(),
-        b"Test".to_string(),
-        ascii::string(b"https://example.com"),
-        token_price,
-        price_multiplier,
-        500_000,
-        max_goal,
-        subscription_start,
-        DAY * 7,
-        DAY * 365,
-        80,
-        tokens,
-        &clock,
-        ctx(&mut scenario),
-    );
+    let (mut scenario, mut clock, settings) = init1(founder);
 
     // Fast forward to just before subscription ends, then invest
     clock::increment_for_testing(&mut clock, DAY * 7);
@@ -1100,10 +844,8 @@ fun test_investor_claim_tokens() {
     assert_u64_eq(claimed_tokens.value(), immediate_unlock);
     transfer::public_transfer(claimed_tokens, @0x0);
 
-    test_scenario::return_shared(pod);
-    test_scenario::return_shared(settings);
-    sui::clock::destroy_for_testing(clock);
-    test_scenario::end(scenario);
+    cleanup(clock, pod, settings);
+    scenario.end();
 }
 
 #[test]
@@ -1111,39 +853,7 @@ fun test_founder_claim_funds() {
     let founder = @0x1;
     let investor = @0x2;
 
-    let mut scenario = test_scenario::begin(founder);
-    let ctx = ctx(&mut scenario);
-
-    // Setup
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, founder);
-
-    let settings = scenario.take_shared<GlobalSettings>();
-    let mut clock = sui::clock::create_for_testing(ctx(&mut scenario));
-
-    let token_price = 100;
-    let price_multiplier = 10;
-    let max_goal = 1_000_000;
-    let required_tokens = (max_goal * price_multiplier) / token_price;
-    let tokens = mint_for_testing(required_tokens, ctx(&mut scenario));
-
-    pod::create_pod<SUI, SUI>(
-        &settings,
-        b"Test".to_string(),
-        b"Test".to_string(),
-        ascii::string(b"https://example.com"),
-        token_price,
-        price_multiplier,
-        500_000,
-        max_goal,
-        clock.timestamp_ms() + MINUTE,
-        DAY * 7,
-        DAY * 365,
-        80,
-        tokens,
-        &clock,
-        ctx(&mut scenario),
-    );
+    let (mut scenario, mut clock, settings) = init1(founder);
 
     // Fast forward to just before subscription ends, then invest
     clock::increment_for_testing(&mut clock, DAY * 7);
@@ -1174,10 +884,8 @@ fun test_founder_claim_funds() {
     transfer::public_transfer(claimed_funds, @0x0);
 
     test_scenario::return_to_sender(&scenario, cap);
-    test_scenario::return_shared(pod);
-    test_scenario::return_shared(settings);
-    sui::clock::destroy_for_testing(clock);
-    test_scenario::end(scenario);
+    cleanup(clock, pod, settings);
+    scenario.end();
 }
 
 #[test]
@@ -1185,45 +893,13 @@ fun test_withdraw_unallocated_tokens() {
     let founder = @0x1;
     let investor = @0x2;
 
-    let mut scenario = test_scenario::begin(founder);
-    let ctx = ctx(&mut scenario);
-
-    // Setup
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, founder);
-
-    let settings = scenario.take_shared<GlobalSettings>();
-    let mut clock = sui::clock::create_for_testing(ctx(&mut scenario));
-
-    let token_price = 100;
-    let price_multiplier = 10;
-    let max_goal = 1_000_000;
-    let required_tokens = (max_goal * price_multiplier) / token_price;
-    let tokens = mint_for_testing(required_tokens, ctx(&mut scenario));
-
-    pod::create_pod<SUI, SUI>(
-        &settings,
-        b"Test".to_string(),
-        b"Test".to_string(),
-        ascii::string(b"https://example.com"),
-        token_price,
-        price_multiplier,
-        500_000,
-        max_goal,
-        clock.timestamp_ms() + MINUTE,
-        DAY * 7,
-        DAY * 365,
-        80,
-        tokens,
-        &clock,
-        ctx(&mut scenario),
-    );
+    let (mut scenario, mut clock, settings) = init1(founder);
 
     // Fast forward and invest
     clock::increment_for_testing(&mut clock, MINUTE * 2);
     next_tx(&mut scenario, investor);
     let mut pod = scenario.take_shared<pod::Pod<SUI, SUI>>();
-    let investment = mint_for_testing(500_000, ctx(&mut scenario));
+    let investment = mint_for_testing(800_000, ctx(&mut scenario));
     let excess = pod::invest<SUI, SUI>(&mut pod, investment, &clock, ctx(&mut scenario));
     transfer::public_transfer(excess, @0x0);
     test_scenario::return_shared(pod);
@@ -1247,10 +923,8 @@ fun test_withdraw_unallocated_tokens() {
     transfer::public_transfer(withdrawn, @0x0);
 
     test_scenario::return_to_sender(&scenario, cap);
-    test_scenario::return_shared(pod);
-    test_scenario::return_shared(settings);
-    sui::clock::destroy_for_testing(clock);
-    test_scenario::end(scenario);
+    cleanup(clock, pod, settings);
+    scenario.end();
 }
 
 // ================================
@@ -1262,39 +936,7 @@ fun test_exit_during_small_fee_period() {
     let founder = @0x1;
     let investor = @0x2;
 
-    let mut scenario = test_scenario::begin(founder);
-    let ctx = ctx(&mut scenario);
-
-    // Setup and complete subscription
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, founder);
-
-    let settings = scenario.take_shared<GlobalSettings>();
-    let mut clock = sui::clock::create_for_testing(ctx(&mut scenario));
-
-    let token_price = 100;
-    let price_multiplier = 10;
-    let max_goal = 1_000_000;
-    let required_tokens = (max_goal * price_multiplier) / token_price;
-    let tokens = mint_for_testing(required_tokens, ctx(&mut scenario));
-
-    pod::create_pod<SUI, SUI>(
-        &settings,
-        b"Test".to_string(),
-        b"Test".to_string(),
-        ascii::string(b"https://example.com"),
-        token_price,
-        price_multiplier,
-        500_000,
-        max_goal,
-        clock.timestamp_ms() + MINUTE,
-        DAY * 7,
-        DAY * 365,
-        80,
-        tokens,
-        &clock,
-        ctx(&mut scenario),
-    );
+    let (mut scenario, mut clock, settings) = init1(founder);
 
     // Fast forward and invest
     clock::increment_for_testing(&mut clock, MINUTE * 2);
@@ -1322,10 +964,8 @@ fun test_exit_during_small_fee_period() {
     transfer::public_transfer(refund, @0x0);
     transfer::public_transfer(vested_tokens, @0x0);
 
-    test_scenario::return_shared(pod);
-    test_scenario::return_shared(settings);
-    sui::clock::destroy_for_testing(clock);
-    test_scenario::end(scenario);
+    cleanup(clock, pod, settings);
+    scenario.end();
 }
 
 #[test]
@@ -1333,39 +973,7 @@ fun test_exit_after_small_fee_period() {
     let founder = @0x1;
     let investor = @0x2;
 
-    let mut scenario = test_scenario::begin(founder);
-    let ctx = ctx(&mut scenario);
-
-    // Setup and complete subscription
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, founder);
-
-    let settings = scenario.take_shared<GlobalSettings>();
-    let mut clock = sui::clock::create_for_testing(ctx(&mut scenario));
-
-    let token_price = 100;
-    let price_multiplier = 10;
-    let max_goal = 1_000_000;
-    let required_tokens = (max_goal * price_multiplier) / token_price;
-    let tokens = mint_for_testing(required_tokens, ctx(&mut scenario));
-
-    pod::create_pod<SUI, SUI>(
-        &settings,
-        b"Test".to_string(),
-        b"Test".to_string(),
-        ascii::string(b"https://example.com"),
-        token_price,
-        price_multiplier,
-        500_000,
-        max_goal,
-        clock.timestamp_ms() + MINUTE,
-        DAY * 7,
-        DAY * 365,
-        80,
-        tokens,
-        &clock,
-        ctx(&mut scenario),
-    );
+    let (mut scenario, mut clock, settings) = init1(founder);
 
     // Fast forward and invest
     clock::increment_for_testing(&mut clock, MINUTE * 2);
@@ -1393,10 +1001,8 @@ fun test_exit_after_small_fee_period() {
     transfer::public_transfer(refund, @0x0);
     transfer::public_transfer(vested_tokens, @0x0);
 
-    test_scenario::return_shared(pod);
-    test_scenario::return_shared(settings);
-    sui::clock::destroy_for_testing(clock);
-    test_scenario::end(scenario);
+    cleanup(clock, pod, settings);
+    scenario.end();
 }
 
 // ================================
@@ -1408,39 +1014,7 @@ fun test_failed_pod_refund() {
     let founder = @0x1;
     let investor = @0x2;
 
-    let mut scenario = test_scenario::begin(founder);
-    let ctx = ctx(&mut scenario);
-
-    // Setup: create pod with high min goal
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, founder);
-
-    let settings = scenario.take_shared<GlobalSettings>();
-    let mut clock = sui::clock::create_for_testing(ctx(&mut scenario));
-
-    let token_price = 100;
-    let price_multiplier = 10;
-    let max_goal = 1_000_000;
-    let required_tokens = (max_goal * price_multiplier) / token_price;
-    let tokens = mint_for_testing(required_tokens, ctx(&mut scenario));
-
-    pod::create_pod<SUI, SUI>(
-        &settings,
-        b"Test".to_string(),
-        b"Test".to_string(),
-        ascii::string(b"https://example.com"),
-        token_price,
-        price_multiplier,
-        800_000, // High min goal
-        max_goal,
-        clock.timestamp_ms() + MINUTE,
-        DAY * 7,
-        DAY * 365,
-        80,
-        tokens,
-        &clock,
-        ctx(&mut scenario),
-    );
+    let (mut scenario, mut clock, settings) = init1(founder);
 
     // Fast forward and invest less than min
     clock::increment_for_testing(&mut clock, MINUTE * 2);
@@ -1454,9 +1028,6 @@ fun test_failed_pod_refund() {
     // Fast forward past subscription end
     clock::increment_for_testing(&mut clock, DAY * 7 + HOUR);
 
-    // Verify pod failed
-    // Note: pod is in a new transaction, already returned
-
     // Investor gets full refund
     next_tx(&mut scenario, investor);
     let mut pod = scenario.take_shared<pod::Pod<SUI, SUI>>();
@@ -1464,10 +1035,8 @@ fun test_failed_pod_refund() {
     assert_u64_eq(refund.value(), 500_000);
     transfer::public_transfer(refund, @0x0);
 
-    test_scenario::return_shared(pod);
-    test_scenario::return_shared(settings);
-    sui::clock::destroy_for_testing(clock);
-    test_scenario::end(scenario);
+    cleanup(clock, pod, settings);
+    scenario.end();
 }
 
 #[test]
@@ -1475,39 +1044,7 @@ fun test_failed_pod_withdraw_tokens() {
     let founder = @0x1;
     let investor = @0x2;
 
-    let mut scenario = test_scenario::begin(founder);
-    let ctx = ctx(&mut scenario);
-
-    // Setup: create pod
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, founder);
-
-    let settings = scenario.take_shared<GlobalSettings>();
-    let mut clock = sui::clock::create_for_testing(ctx(&mut scenario));
-
-    let token_price = 100;
-    let price_multiplier = 10;
-    let max_goal = 1_000_000;
-    let required_tokens = (max_goal * price_multiplier) / token_price;
-    let tokens = mint_for_testing(required_tokens, ctx(&mut scenario));
-
-    pod::create_pod<SUI, SUI>(
-        &settings,
-        b"Test".to_string(),
-        b"Test".to_string(),
-        ascii::string(b"https://example.com"),
-        token_price,
-        price_multiplier,
-        800_000,
-        max_goal,
-        clock.timestamp_ms() + MINUTE,
-        DAY * 7,
-        DAY * 365,
-        80,
-        tokens,
-        &clock,
-        ctx(&mut scenario),
-    );
+    let (mut scenario, mut clock, settings) = init1(founder);
 
     // Fast forward and investor invests less than min
     clock::increment_for_testing(&mut clock, MINUTE * 2);
@@ -1526,14 +1063,12 @@ fun test_failed_pod_withdraw_tokens() {
     let mut pod = scenario.take_shared<pod::Pod<SUI, SUI>>();
     let cap = scenario.take_from_sender<pod::PodAdminCap>();
     let withdrawn = pod::failed_pod_withdraw<SUI, SUI>(&mut pod, &cap, &clock, ctx(&mut scenario));
-    assert_u64_eq(withdrawn.value(), required_tokens);
+    assert_u64_eq(withdrawn.value(), (MAX_GOAL * PRICE_MULTIPLIER) / TOKEN_PRICE);
     transfer::public_transfer(withdrawn, @0x0);
 
     test_scenario::return_to_sender(&scenario, cap);
-    test_scenario::return_shared(pod);
-    test_scenario::return_shared(settings);
-    sui::clock::destroy_for_testing(clock);
-    test_scenario::end(scenario);
+    cleanup(clock, pod, settings);
+    scenario.end();
 }
 
 // ================================
@@ -1546,37 +1081,7 @@ fun test_zero_investment() {
     let founder = @0x1;
     let investor = @0x2;
 
-    let mut scenario = test_scenario::begin(founder);
-    let ctx = ctx(&mut scenario);
-
-    // Setup
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, founder);
-
-    let settings = scenario.take_shared<GlobalSettings>();
-    let mut clock = sui::clock::create_for_testing(ctx(&mut scenario));
-
-    let token_price = 100;
-    let required_tokens = (1_000_000 * 10) / token_price;
-    let tokens = mint_for_testing(required_tokens, ctx(&mut scenario));
-
-    pod::create_pod<SUI, SUI>(
-        &settings,
-        b"Test".to_string(),
-        b"Test".to_string(),
-        ascii::string(b"https://example.com"),
-        token_price,
-        10,
-        500_000,
-        1_000_000,
-        clock.timestamp_ms() + MINUTE,
-        DAY * 7,
-        DAY * 365,
-        80,
-        tokens,
-        &clock,
-        ctx(&mut scenario),
-    );
+    let (mut scenario, mut clock, settings) = init1(founder);
 
     clock::increment_for_testing(&mut clock, MINUTE * 2);
 
@@ -1587,48 +1092,15 @@ fun test_zero_investment() {
     let _excess = pod::invest<SUI, SUI>(&mut pod, investment, &clock, ctx(&mut scenario));
     transfer::public_transfer(_excess, @0x0);
 
-    test_scenario::return_shared(pod);
-    test_scenario::return_shared(settings);
-    sui::clock::destroy_for_testing(clock);
-    test_scenario::end(scenario);
+    cleanup(clock, pod, settings);
+    scenario.end();
 }
 
 #[test]
 fun test_pod_status_transitions() {
     let founder = @0x1;
 
-    let mut scenario = test_scenario::begin(founder);
-    let ctx = ctx(&mut scenario);
-
-    // Setup
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, founder);
-
-    let settings = scenario.take_shared<GlobalSettings>();
-    let mut clock = sui::clock::create_for_testing(ctx(&mut scenario));
-
-    let token_price = 100;
-    let required_tokens = (1_000_000 * 10) / token_price;
-    let tokens = mint_for_testing(required_tokens, ctx(&mut scenario));
-
-    let subscription_start = clock.timestamp_ms() + HOUR;
-    pod::create_pod<SUI, SUI>(
-        &settings,
-        b"Test".to_string(),
-        b"Test".to_string(),
-        ascii::string(b"https://example.com"),
-        token_price,
-        10,
-        500_000,
-        1_000_000,
-        subscription_start,
-        DAY * 7,
-        DAY * 365,
-        80,
-        tokens,
-        &clock,
-        ctx(&mut scenario),
-    );
+    let (mut scenario, mut clock, settings) = init1(founder);
 
     // Start new transaction to access created pod
     next_tx(&mut scenario, founder);
@@ -1651,10 +1123,8 @@ fun test_pod_status_transitions() {
     let mut pod = scenario.take_shared<pod::Pod<SUI, SUI>>();
     assert_u8_eq(pod::pod_status(&pod, &clock), 2);
 
-    test_scenario::return_shared(pod);
-    test_scenario::return_shared(settings);
-    sui::clock::destroy_for_testing(clock);
-    test_scenario::end(scenario);
+    cleanup(clock, pod, settings);
+    scenario.end();
 }
 
 #[test]
@@ -1680,40 +1150,7 @@ fun test_full_pod_lifecycle_success() {
     let investor2 = @0x3;
     let investor3 = @0x4;
 
-    let mut scenario = test_scenario::begin(founder);
-    let ctx = ctx(&mut scenario);
-
-    // 1. Initialize platform
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, founder);
-
-    let settings = scenario.take_shared<GlobalSettings>();
-    let mut clock = sui::clock::create_for_testing(ctx(&mut scenario));
-
-    // 2. Founder creates pod
-    let token_price = 100;
-    let price_multiplier = 10;
-    let max_goal = 1_000_000;
-    let required_tokens = (max_goal * price_multiplier) / token_price;
-    let tokens = mint_for_testing(required_tokens, ctx(&mut scenario));
-
-    pod::create_pod<SUI, SUI>(
-        &settings,
-        b"Project X".to_string(),
-        b"Revolutionary project".to_string(),
-        ascii::string(b"https://forum.example.com"),
-        token_price,
-        price_multiplier,
-        500_000,
-        max_goal,
-        clock.timestamp_ms() + MINUTE,
-        DAY * 7,
-        DAY * 365,
-        80,
-        tokens,
-        &clock,
-        ctx(&mut scenario),
-    );
+    let (mut scenario, mut clock, settings) = init1(founder);
 
     // 3. Fast forward to subscription
     clock::increment_for_testing(&mut clock, MINUTE * 2);
@@ -1788,10 +1225,8 @@ fun test_full_pod_lifecycle_success() {
     transfer::public_transfer(refund, @0x0);
     transfer::public_transfer(vested_tokens, @0x0);
 
-    test_scenario::return_shared(pod);
-    test_scenario::return_shared(settings);
-    sui::clock::destroy_for_testing(clock);
-    test_scenario::end(scenario);
+    cleanup(clock, pod, settings);
+    scenario.end();
 }
 
 #[test]
@@ -1799,39 +1234,7 @@ fun test_full_pod_lifecycle_failure() {
     let founder = @0x1;
     let investor = @0x2;
 
-    let mut scenario = test_scenario::begin(founder);
-    let ctx = ctx(&mut scenario);
-
-    // 1. Initialize and create pod with high min goal
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, founder);
-
-    let settings = scenario.take_shared<GlobalSettings>();
-    let mut clock = sui::clock::create_for_testing(ctx(&mut scenario));
-
-    let token_price = 100;
-    let price_multiplier = 10;
-    let max_goal = 2_000_000; // High max goal
-    let required_tokens = (max_goal * price_multiplier) / token_price;
-    let tokens = mint_for_testing(required_tokens, ctx(&mut scenario));
-
-    pod::create_pod<SUI, SUI>(
-        &settings,
-        b"Project Y".to_string(),
-        b"Risky project".to_string(),
-        ascii::string(b"https://forum.example.com"),
-        token_price,
-        price_multiplier,
-        1_500_000, // Very high min goal
-        max_goal,
-        clock.timestamp_ms() + MINUTE,
-        DAY * 7,
-        DAY * 365,
-        80,
-        tokens,
-        &clock,
-        ctx(&mut scenario),
-    );
+    let (mut scenario, mut clock, settings) = init1(founder);
 
     // 2. Fast forward and invest (but not enough to reach min)
     clock::increment_for_testing(&mut clock, MINUTE * 2);
@@ -1858,9 +1261,6 @@ fun test_full_pod_lifecycle_failure() {
     // 4. Fast forward past subscription end
     clock::increment_for_testing(&mut clock, DAY * 7);
 
-    // 5. Verify pod failed
-    // Note: pod is in a new transaction, already returned
-
     // 6. Investors get refunds
     next_tx(&mut scenario, investor);
     let mut pod = scenario.take_shared<pod::Pod<SUI, SUI>>();
@@ -1880,12 +1280,10 @@ fun test_full_pod_lifecycle_failure() {
         &clock,
         ctx(&mut scenario),
     );
-    assert_u64_eq(withdrawn_tokens.value(), required_tokens);
+    assert_u64_eq(withdrawn_tokens.value(), (MAX_GOAL * PRICE_MULTIPLIER) / TOKEN_PRICE);
     transfer::public_transfer(withdrawn_tokens, @0x0);
 
     test_scenario::return_to_sender(&scenario, cap);
-    test_scenario::return_shared(pod);
-    test_scenario::return_shared(settings);
-    sui::clock::destroy_for_testing(clock);
-    test_scenario::end(scenario);
+    cleanup(clock, pod, settings);
+    scenario.end();
 }
