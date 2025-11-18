@@ -119,23 +119,13 @@ fun test_create_pod_success() {
     let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     let cap = scenario.take_from_sender<PodAdminCap>();
 
-    let (
-        pod_token_price,
-        pod_price_multiplier,
-        pod_min_goal,
-        pod_max_goal,
-        _,
-        _,
-        pod_vesting_duration,
-        pod_immediate_unlock_pm,
-        _,
-    ) = pod.get_pod_params();
-    assert_u64_eq(pod_token_price, TOKEN_PRICE);
-    assert_u64_eq(pod_price_multiplier, PRICE_MULTIPLIER);
-    assert_u64_eq(pod_min_goal, MIN_GOAL);
-    assert_u64_eq(pod_max_goal, MAX_GOAL);
-    assert_u64_eq(pod_vesting_duration, VESTING_DURATION);
-    assert_u64_eq(pod_immediate_unlock_pm, IMMEDIATE_UNLOCK_PM);
+    let params = pod.get_pod_params();
+    assert_u64_eq(pod::get_token_price(&params), TOKEN_PRICE);
+    assert_u64_eq(pod::get_price_multiplier(&params), PRICE_MULTIPLIER);
+    assert_u64_eq(pod::get_min_goal(&params), MIN_GOAL);
+    assert_u64_eq(pod::get_max_goal(&params), MAX_GOAL);
+    assert_u64_eq(pod::get_vesting_duration(&params), VESTING_DURATION);
+    assert_u64_eq(pod::get_immediate_unlock_pm(&params), IMMEDIATE_UNLOCK_PM);
 
     test_scenario::return_to_sender(&scenario, cap);
     cleanup(clock, pod, settings);
@@ -336,9 +326,9 @@ fun test_max_goal_reached_early() {
 
     // Should have 100_000 excess
     assert_u64_eq(excess2.value(), 100_000);
-    let (_, _, _, _, _, pod_subscription_end, _, _, pod_total_raised) = pod.get_pod_params();
-    assert_u64_eq(pod_total_raised, MAX_GOAL);
-    assert_u64_eq(pod_subscription_end, clock.timestamp_ms());
+    let params = pod.get_pod_params();
+    assert_u64_eq(pod::get_total_raised(&params), MAX_GOAL);
+    assert_u64_eq(pod::get_subscription_end(&params), clock.timestamp_ms());
     transfer::public_transfer(excess2, @0x0);
 
     cleanup(clock, pod, settings);
@@ -404,8 +394,8 @@ fun test_multiple_investments_same_investor() {
     transfer::public_transfer(excess2, @0x0);
 
     // Total should be combined
-    let (_, _, _, _, _, _, _, _, pod_total_raised) = pod.get_pod_params();
-    assert_u64_eq(pod_total_raised, 150_000);
+    let params = pod.get_pod_params();
+    assert_u64_eq(pod::get_total_raised(&params), 150_000);
 
     cleanup(clock, pod, settings);
     scenario.end();
@@ -443,8 +433,8 @@ fun test_cancel_subscription() {
     transfer::public_transfer(refund, @0x0);
 
     // Total raised should be reduced
-    let (_, _, _, _, _, _, _, _, pod_total_raised) = pod.get_pod_params();
-    assert_u64_eq(pod_total_raised, kept);
+    let params = pod.get_pod_params();
+    assert_u64_eq(pod::get_total_raised(&params), kept);
 
     cleanup(clock, pod, settings);
     scenario.end();
