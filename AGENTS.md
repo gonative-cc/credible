@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AI Agents Instructions
 
 This file provides guidance to AI agents, when working with code in this repository
 
@@ -74,8 +74,8 @@ The entire platform is implemented in a single Move module (`sources/pod.move`) 
 - **Token Claims**: `investor_claim_tokens()` - Investors claim vested tokens
 - **Fund Claims**: `founder_claim_founds()` - Founders claim vested funds
 - **Exit Mechanism**: `exit_investment()` - Investors can exit with graduated fees:
-  - Within 3 days of vesting: 0.8% fee
-  - After 14 days: 10% fee
+  - Within `small_fee_duration` of vesting: 0.8% fee.
+  - After that: `immediate_unlock_pm` fee.
 - **Failed Pod Handling**: `failed_pod_refund()` and `failed_pod_withdraw()`
 
 **Key Design Patterns:**

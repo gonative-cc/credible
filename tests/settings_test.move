@@ -32,7 +32,6 @@ fun test_platform_initialization() {
         max_immediate_unlock_pm,
         min_vesting_duration,
         min_subscription_duration,
-        exit_fee_pm,
         exit_small_fee_pm,
         small_fee_duration,
         cancel_subscription_keep,
@@ -41,7 +40,6 @@ fun test_platform_initialization() {
     assert_u64_eq(max_immediate_unlock_pm, 100); // 10.0%
     assert_u64_eq(min_vesting_duration, DAY * 30 * 3); // 3 months
     assert_u64_eq(min_subscription_duration, DAY * 7); // 7 days
-    assert_u64_eq(exit_fee_pm, 100); // 10.0%
     assert_u64_eq(exit_small_fee_pm, 8); // 0.8%
     assert_u64_eq(small_fee_duration, DAY * 3); // 3 days
     assert_u64_eq(cancel_subscription_keep, 1); // 0.1%
@@ -78,7 +76,6 @@ fun test_update_all_settings() {
         option::some(100), // 10%
         option::some(DAY * 60), // 2 months
         option::some(DAY * 14), // 14 days
-        option::some(90), // 9%
         option::some(10), // 1%
         option::some(DAY * 30), // 30 days
         option::some(2), // 0.2%
@@ -90,7 +87,6 @@ fun test_update_all_settings() {
         max_immediate_unlock_pm,
         min_vesting_duration,
         min_subscription_duration,
-        exit_fee_pm,
         exit_small_fee_pm,
         small_fee_duration,
         cancel_subscription_keep,
@@ -99,7 +95,6 @@ fun test_update_all_settings() {
     assert_u64_eq(max_immediate_unlock_pm, 100);
     assert_u64_eq(min_vesting_duration, DAY * 60);
     assert_u64_eq(min_subscription_duration, DAY * 14);
-    assert_u64_eq(exit_fee_pm, 90);
     assert_u64_eq(exit_small_fee_pm, 10);
     assert_u64_eq(small_fee_duration, DAY * 30);
     assert_u64_eq(cancel_subscription_keep, 2);
@@ -131,17 +126,15 @@ fun test_update_individual_settings() {
         option::none(),
         option::none(),
         option::none(),
-        option::none(),
         ctx(&mut scenario),
     );
 
     // Verify only max_immediate_unlock changed
-    let (max_immediate_unlock_pm, _, _, exit_fee_pm, _, _, _) = pod::get_global_settings(
+    let (max_immediate_unlock_pm, _, _, _, _, _) = pod::get_global_settings(
         &settings,
     );
 
     assert_u64_eq(max_immediate_unlock_pm, 120);
-    assert_u64_eq(exit_fee_pm, 100); // unchanged
 
     test_scenario::return_to_sender(&scenario, cap);
     test_scenario::return_shared(settings);
@@ -167,7 +160,6 @@ fun test_update_settings_zero_vesting_duration() {
         &mut settings,
         option::none(),
         option::some(0),
-        option::none(),
         option::none(),
         option::none(),
         option::none(),

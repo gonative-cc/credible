@@ -82,15 +82,14 @@ graph TD
 
 ### System Parameters
 
-| Parameter                   | Default  | Description                                                         |
-| --------------------------- | -------- | ------------------------------------------------------------------- |
-| `max_immediate_unlock`      | 10%      | Maximum % of funds team receives immediately after successful raise |
-| `min_vesting_duration`      | 3 months | Minimum vesting duration for a Pod                                  |
-| `min_subscription_duration` | 7 days   | Minimum subscription period duration                                |
-| `exit_fee`                  | 10%      | Standard exit fee after grace period                                |
-| `exit_small_fee`            | 0.8%     | Reduced exit fee during grace period                                |
-| `small_fee_duration`        | 3 days   | Grace period with reduced exit fees                                 |
-| `cancel_subscription_keep`  | 0.1%     | Amount kept when investor cancels subscription                      |
+| Parameter                   | Default  | Description                                                                                                    |
+| --------------------------- | -------- | -------------------------------------------------------------------------------------------------------------- |
+| `max_immediate_unlock`      | 10%      | Maximum % of funds team receives immediately after successful raise. It's also used to calculate the exit fee. |
+| `min_vesting_duration`      | 3 months | Minimum vesting duration for a Pod                                                                             |
+| `min_subscription_duration` | 7 days   | Minimum subscription period duration                                                                           |
+| `exit_small_fee`            | 0.8%     | Reduced exit fee during grace period                                                                           |
+| `small_fee_duration`        | 3 days   | Grace period with reduced exit fees                                                                            |
+| `cancel_subscription_keep`  | 0.1%     | Amount kept when investor cancels subscription                                                                 |
 
 ### Phase 1: Pod Creation
 
@@ -140,12 +139,10 @@ Progress Update: Founders should provide regular progress updates through the li
 
 ### Exit Mechanism
 
-At any time, an investor can exit their investment if they believe the team is not meeting expectations or need liquidity:
+At any time, an investor can exit their investment if they believe the team is not meeting expectations or need liquidity. Investor is charged a fee when exiting, to protect the founders from a massive exit:
 
 - If the exit occurs during `small_fee_duration` after vesting starts: `exit_small_fee` is charged.
-- After `small_fee_duration`: the standard `exit_fee` is charged.
-
-The exit fee protects the founders from a massive exit.
+- After `small_fee_duration`: the fee is charged based on the pod `immediate_unlock` value.
 
 **Exit Calculation Details:**
 Let: `I` = Amount invested by the investor, `A` = token allocation for the investor, `Vd` = vesting duration, `Ts` = vesting start time, `T` = exit time.
@@ -167,6 +164,7 @@ Remaining unvested tokens are returned to the founders.
 3. If investors lack confidence, they can exit during the subscription period, protecting initial investors and ensuring teams have planned properly.
 4. Market Validation: Failed subscriptions signal lack of market fit
 5. Growth Potential: Successful pods can create follow-on funding rounds
+6. Balance & checks mechanism based on `immediate_unlock`: Founders can set higher immediate unlock, that will impose higher fee on the investors when exiting. This will cause higher scrutiny and due diligence when subscribing to the project. Smaller `immediate_unlock` will make it less risky for investors (smaller fee for exit). `max_immediate_unlock` to protect the platform from greedy investors setting too high immediate unlock.
 
 Risk Mitigation
 
