@@ -41,18 +41,18 @@ const E_ZERO_INVESTMENT: u64 = 14;
 // --- Module Initialization ---
 //
 fun init(ctx: &mut TxContext) {
-    let day = 1000 * 60 * 60 * 24;
+    let minute = 1000 * 60;
     let settings = GlobalSettings {
         id: object::new(ctx),
         max_immediate_unlock_pm: 100, // 10.0%
-        min_vesting_duration: day * 30 * 3, // 3 months
+        min_vesting_duration: 5 * minute,
         max_vesting_duration: day * 30 * 24, // 24 months
-        min_subscription_duration: day * 7,
+        min_subscription_duration: 5 * minute,
         max_subscription_duration: day * 30, // 30 days
         grace_fee_pm: 8, // 0.8%
-        grace_duration: 1000 * 60 * 60 * 24 * 3, // 3 days
+        grace_duration: 3*minute,
         cancel_subscription_keep: 1, // 0.1%
-        setup_fee: 5_000_000_000, // 5 SUI
+        setup_fee: 10_000_000, // 0.01 SUI
         treasury: tx_context::sender(ctx),
     };
     transfer::share_object(settings);
