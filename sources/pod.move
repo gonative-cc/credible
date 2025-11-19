@@ -42,6 +42,7 @@ const E_ZERO_INVESTMENT: u64 = 14;
 //
 fun init(ctx: &mut TxContext) {
     let minute = 1000 * 60;
+    let day = 24*60 *minute;
     let settings = GlobalSettings {
         id: object::new(ctx),
         max_immediate_unlock_pm: 100, // 10.0%

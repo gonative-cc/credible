@@ -1,0 +1,19 @@
+# Deployment info
+
+## Nov 19
+
+Deployment Tx: [4t9Rkd4t6u5FLuQhmuBmBfdSjQeMKwSTnjgtbLSccRPY](https://testnet.suivision.xyz/txblock/4t9Rkd4t6u5FLuQhmuBmBfdSjQeMKwSTnjgtbLSccRPY)
+package id: 0xd5bec708e04626b31e8f953ef1f6d6d5b79b4a837446a450633b004183233d5c
+Objects:
+- PlatformAdminCap: 0xf9b0d25e7d16899a102a2167013ce31ab4b08fe6b70379f24581f3e259282754
+- GlobalSettings: 0xa74d6d2d7cab3cec42cfad85e3211d183372701ed29b13962144a8e0e050ad45
+
+## Nov 11
+
+package id: 0x6f5f78fbfc1c6d1b5de790a549b8cd0d34109671f8d330ba52bd641e24209aa9
+Objects:
+- PlatformAdminCap: 0xc677e9903cd8a911529ae1b4cf56b919ea2a608aa6d6e5c523b54c905b7d338e
+- GlobalSettings: 0xd608a92432a6c3e526e450874c10f7569780f29c557323576ffc97cf1fc2d37e
+- example pod: 0x6f5f78fbfc1c6d1b5de790a549b8cd0d34109671f8d330ba52bd641e24209aa9
+
+
