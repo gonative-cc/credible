@@ -47,7 +47,7 @@ fun init(ctx: &mut TxContext) {
         max_immediate_unlock_pm: 100, // 10.0%
         min_vesting_duration: day * 30 * 3, // 3 months
         min_subscription_duration: day * 7,
-        exit_small_fee_pm: 8, // 0.8%
+        grace_fee_pm: 8, // 0.8%
         small_fee_duration: 1000 * 60 * 60 * 24 * 3, // 3 days
         cancel_subscription_keep: 1, // 0.1%
         setup_fee: 5_000_000_000, // 5 SUI
@@ -102,7 +102,7 @@ public struct PodParams has copy, drop, store {
     subscription_end: u64,
     vesting_duration: u64,
     immediate_unlock_pm: u64,
-    exit_small_fee_pm: u64,
+    grace_fee_pm: u64,
     small_fee_duration: u64,
     total_raised: u64,
 }
@@ -115,7 +115,7 @@ public struct GlobalSettings has key {
     max_immediate_unlock_pm: u64,
     min_vesting_duration: u64,
     min_subscription_duration: u64,
-    exit_small_fee_pm: u64,
+    grace_fee_pm: u64,
     small_fee_duration: u64,
     cancel_subscription_keep: u64,
     setup_fee: u64,
@@ -129,7 +129,7 @@ public fun get_global_settings(
         settings.max_immediate_unlock_pm,
         settings.min_vesting_duration,
         settings.min_subscription_duration,
-        settings.exit_small_fee_pm,
+        settings.grace_fee_pm,
         settings.small_fee_duration,
         settings.cancel_subscription_keep,
         settings.setup_fee,
@@ -137,7 +137,7 @@ public fun get_global_settings(
     )
 }
 
-public fun get_exit_small_fee_pm(s: &GlobalSettings): u64 { s.exit_small_fee_pm }
+public fun get_grace_fee_pm(s: &GlobalSettings): u64 { s.grace_fee_pm }
 
 // --- Platform Admin Functions ---
 public fun update_settings(
@@ -146,7 +146,7 @@ public fun update_settings(
     max_immediate_unlock_pm: Option<u64>,
     min_vesting_duration: Option<u64>,
     min_subscription_duration: Option<u64>,
-    exit_small_fee_pm: Option<u64>,
+    grace_fee_pm: Option<u64>,
     small_fee_duration: Option<u64>,
     cancel_subscription_keep: Option<u64>,
     setup_fee: Option<u64>,
@@ -165,8 +165,8 @@ public fun update_settings(
         settings.min_subscription_duration = option::destroy_some(min_subscription_duration);
     };
 
-    if (option::is_some(&exit_small_fee_pm)) {
-        settings.exit_small_fee_pm = option::destroy_some(exit_small_fee_pm);
+    if (option::is_some(&grace_fee_pm)) {
+        settings.grace_fee_pm = option::destroy_some(grace_fee_pm);
     };
     if (option::is_some(&small_fee_duration)) {
         settings.small_fee_duration = option::destroy_some(small_fee_duration);
@@ -267,7 +267,7 @@ public fun create_pod<C, T>(
         subscription_end,
         vesting_duration,
         immediate_unlock_pm,
-        exit_small_fee_pm: settings.exit_small_fee_pm,
+        grace_fee_pm: settings.grace_fee_pm,
         small_fee_duration: settings.small_fee_duration,
         total_raised: 0,
     };
@@ -316,7 +316,7 @@ public fun get_pod_vesting_duration(p: &PodParams): u64 { p.vesting_duration }
 
 public fun get_pod_immediate_unlock_pm(p: &PodParams): u64 { p.immediate_unlock_pm }
 
-public fun get_pod_exit_small_fee_pm(p: &PodParams): u64 { p.exit_small_fee_pm }
+public fun get_pod_grace_fee_pm(p: &PodParams): u64 { p.grace_fee_pm }
 
 public fun get_pod_small_fee_duration(p: &PodParams): u64 { p.small_fee_duration }
 
@@ -493,8 +493,8 @@ public fun exit_investment<C, T>(
     assert!(ir.claimed_tokens < ir.allocation, E_ALREADY_EXITED);
 
     let (vested_tokens, funds_unlocked) = if (status == STATUS_GRACE) {
-        let vested_tokens = ratio_ext_pm(ir.allocation, pod.params.exit_small_fee_pm);
-        // let funds_unlocked = ratio_ext_pm(ir.investment, pod.params.exit_small_fee_pm);
+        let vested_tokens = ratio_ext_pm(ir.allocation, pod.params.grace_fee_pm);
+        // let funds_unlocked = ratio_ext_pm(ir.investment, pod.params.grace_fee_pm);
         // (vested_tokens, funds_unlocked)
         (vested_tokens, 0)
     } else {
@@ -516,7 +516,7 @@ public fun exit_investment<C, T>(
     };
 
     let fee_pm = if (status == STATUS_GRACE) {
-        pod.params.exit_small_fee_pm
+        pod.params.grace_fee_pm
     } else {
         pod.params.immediate_unlock_pm
     };

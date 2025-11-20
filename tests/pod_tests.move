@@ -739,7 +739,7 @@ fun test_grace_period_can_exit() {
     assert!(pod.pod_status(&clock) == pod::status_grace());
     let (refund, vested_tokens) = pod.exit_investment(&clock, scenario.ctx());
 
-    let fee = s.get_exit_small_fee_pm();
+    let fee = s.get_grace_fee_pm();
     let expected_refund = investor_put - ratio_ext_pm(investor_put, fee);
     assert_u64_eq(refund.value(), expected_refund);
     assert_u64_eq(vested_tokens.value(), ratio_ext_pm(REQUIRED_TOKENS, fee));

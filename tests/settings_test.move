@@ -32,7 +32,7 @@ fun test_platform_initialization() {
         max_immediate_unlock_pm,
         min_vesting_duration,
         min_subscription_duration,
-        exit_small_fee_pm,
+        grace_fee_pm,
         small_fee_duration,
         cancel_subscription_keep,
         setup_fee,
@@ -42,7 +42,7 @@ fun test_platform_initialization() {
     assert_u64_eq(max_immediate_unlock_pm, 100); // 10.0%
     assert_u64_eq(min_vesting_duration, DAY * 30 * 3); // 3 months
     assert_u64_eq(min_subscription_duration, DAY * 7); // 7 days
-    assert_u64_eq(exit_small_fee_pm, 8); // 0.8%
+    assert_u64_eq(grace_fee_pm, 8); // 0.8%
     assert_u64_eq(small_fee_duration, DAY * 3); // 3 days
     assert_u64_eq(cancel_subscription_keep, 1); // 0.1%
     assert_u64_eq(setup_fee, 5_000_000_000); // 5 SUI
@@ -93,7 +93,7 @@ fun test_update_all_settings() {
         max_immediate_unlock_pm,
         min_vesting_duration,
         min_subscription_duration,
-        exit_small_fee_pm,
+        grace_fee_pm,
         small_fee_duration,
         cancel_subscription_keep,
         setup_fee,
@@ -103,7 +103,7 @@ fun test_update_all_settings() {
     assert_u64_eq(max_immediate_unlock_pm, 100);
     assert_u64_eq(min_vesting_duration, DAY * 60);
     assert_u64_eq(min_subscription_duration, DAY * 14);
-    assert_u64_eq(exit_small_fee_pm, 10);
+    assert_u64_eq(grace_fee_pm, 10);
     assert_u64_eq(small_fee_duration, DAY * 30);
     assert_u64_eq(cancel_subscription_keep, 2);
     assert_u64_eq(setup_fee, 6_000_000_000);

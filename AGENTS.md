@@ -140,7 +140,7 @@ vested_tokens = immediate_unlock + (time_elapsed / vesting_duration) * (allocati
 
 **Exit Fee Logic:**
 ```move
-fee = if (exit_time <= vesting_start + 14_days) exit_small_fee_pm else exit_fee_pm
+fee = if (exit_time <= vesting_start + 14_days) grace_fee_pm else exit_fee_pm
 ```
 
 **Precision:** All percentage calculations use permille (1000) with u128 intermediate results to prevent overflow.

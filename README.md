@@ -87,7 +87,7 @@ graph TD
 | `max_immediate_unlock`      | 10%      | Maximum % of funds team receives immediately after successful raise. It's also used to calculate the exit fee. |
 | `min_vesting_duration`      | 3 months | Minimum vesting duration for a Pod                                                                             |
 | `min_subscription_duration` | 7 days   | Minimum subscription period duration                                                                           |
-| `exit_small_fee`            | 0.8%     | Reduced exit fee during grace period                                                                           |
+| `grace_fee`            | 0.8%     | Reduced exit fee during grace period                                                                           |
 | `small_fee_duration`        | 3 days   | Grace period with reduced exit fees                                                                            |
 | `cancel_subscription_keep`  | 0.1%     | Amount kept when investor cancels subscription                                                                 |
 | `setup_fee`                 | 5 SUI    | Setup fee charged to pod creators                                                                              |
@@ -132,7 +132,7 @@ Starts immediately after the subscription period ends and the minimum investment
 During the grace period:
 - Tokens are not yet vesting; investors cannot claim tokens.
 - Founders cannot claim funds.
-- Investors can exit their investment with the reduced `exit_small_fee` and will be available to the Founders.
+- Investors can exit their investment with the reduced `grace_fee` and will be available to the Founders.
 
 ### Phase 3: Vesting and Token Distribution
 
@@ -153,7 +153,7 @@ Progress Update: Founders should provide regular progress updates through the li
 
 At any time during the grace period or vesting, an investor can exit their investment if they believe the team is not meeting expectations or need liquidity. Investor is charged a fee when exiting, to protect the founders from a massive exit:
 
-- If the exit occurs during the grace period: `exit_small_fee` is charged.
+- If the exit occurs during the grace period: `grace_fee` is charged.
 - After that: the `exit_fee` is charged based on the unvested amount.
 
 **Exit Calculation Details:**
@@ -161,8 +161,8 @@ Let: `I` = Amount invested by the investor, `A` = token allocation for the inves
 
 ```
 if (now <= grace_end) {
-    investment_claim_back = I × (1 - exit_small_fee)
-    tokens_received = A × exit_small_fee
+    investment_claim_back = I × (1 - grace_fee)
+    tokens_received = A × grace_fee
 } else {
     vested_portion = (T-Ts)/Vd
     investment_claim_back = I × (1 - immediate_unlock) × (1 - vested_portion) × (1 - exit_fee)
