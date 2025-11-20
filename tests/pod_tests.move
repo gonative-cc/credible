@@ -21,11 +21,10 @@ const DAY: u64 = HOUR * 24;
 const HOUR: u64 = MINUTE * 60;
 const MINUTE: u64 = 1000 * 60;
 
-const TOKEN_PRICE: u64 = 100;
 const PRICE_MULTIPLIER: u64 = 10;
+const TOKEN_PRICE: u64 = 1; // effectively this the price is price/multiplier = 0.1
 const MIN_GOAL: u64 = 800_000;
 const MAX_GOAL: u64 = 1_000_000;
-// TODO: fix: should be MAX_GOAL / TOKEN_PRICE / PRICE_MULTIPLIER
 const REQUIRED_TOKENS: u64 = (MAX_GOAL * PRICE_MULTIPLIER) / TOKEN_PRICE;
 const IMMEDIATE_UNLOCK_PM: u64 = 50;
 const SUBS_DURATION: u64 = DAY * 7;
@@ -568,10 +567,10 @@ fun test_investor_claim_tokens() {
 
     // Investor claims tokens
     let claimed_tokens = pod.investor_claim_tokens(&clock, scenario.ctx());
-    // Investment: 1_000_000, Token allocation: 1_000_000 * 10 / 100 = 100_000 tokens
-    // Immediate unlock (5%): 100_000 * 50 / 1000 = 5_000 tokens
-    // 1min vested tokens: (100_000 - 5_000) * minute/vesting_duration
-    let expected = 5_000 + (100_000 - 5_000) * MINUTE / VESTING_DURATION;
+    // Investment: 1_000_000, Token allocation: 1_000_000 * 10 / 1 = 10_000_000 tokens
+    // Immediate unlock (5%): 10_000_000 * 50 / 1000 = 500_000 tokens
+    // 1min vested tokens: (10_000_000 - 500_000) * minute/vesting_duration
+    let expected = 500_000 + (10_000_000 - 500_000) * MINUTE / VESTING_DURATION;
 
     assert_u64_eq(claimed_tokens.value(), expected);
     transfer::public_transfer(claimed_tokens, @0x0);
@@ -613,9 +612,9 @@ fun test_founder_claim_funds() {
 
     // Should receive more than immediate unlock due to 1 minute of vesting
     // Investment: 1_000_000, immediate unlock: 50_000
-    // With 1 minute elapsed in 100-day vesting: ~50,001
-    let expected = 50_000;
-    assert!(claimed_funds.value() >= expected, 0);
+    // With 1 minute elapsed in 100-day vesting: ~50,006
+    let expected = 50_006;
+    assert!(claimed_funds.value() == expected, 0);
     transfer::public_transfer(claimed_funds, @0x0);
 
     test_scenario::return_to_sender(&scenario, cap);
