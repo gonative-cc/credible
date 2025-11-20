@@ -650,8 +650,7 @@ public fun calculate_vested_tokens(
 public(package) fun elapsed_vesting_time<C, T>(pod: &Pod<C, T>, clock: &Clock): u64 {
     assert!(pod_status(pod, clock) == STATUS_VESTING, E_POD_NOT_VESTING);
     let now = clock.timestamp_ms();
-    // TODO Vesting should start after the grace period
-    now - pod.params.subscription_end
+    now - (pod.params.subscription_end + pod.params.grace_duration)
 }
 
 /// calculates num * numerator / denominator using extended precision (u128)

@@ -552,8 +552,7 @@ fun test_investor_claim_tokens() {
     // Investment: 1_000_000, Token allocation: 1_000_000 * 10 / 100 = 100_000 tokens
     // Immediate unlock (5%): 100_000 * 50 / 1000 = 5_000 tokens
     // 1min vested tokens: (100_000 - 5_000) * minute/vesting_duration
-    // TODO: FIX: vesting should start after grace period
-    let expected = 5_000 + (100_000 - 5_000) * (GRACE_DURATION + MINUTE) / VESTING_DURATION;
+    let expected = 5_000 + (100_000 - 5_000) * MINUTE / VESTING_DURATION;
 
     assert_u64_eq(claimed_tokens.value(), expected);
     transfer::public_transfer(claimed_tokens, @0x0);
