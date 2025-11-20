@@ -72,7 +72,7 @@ public struct PodAdminCap has key, store {
 
 /// Represents an individual's investment in a pod.
 public struct InvestorRecord has copy, drop, store {
-    investmnet: u64,
+    investment: u64,
     allocation: u64,
     claimed_tokens: u64,
     cancelled: bool,
@@ -198,7 +198,7 @@ public struct EventSubscriptionCancelled has copy, drop {
     pod_id: ID,
     investor: address,
     refunded: u64,
-    investmnet: u64,
+    investment: u64,
     allocation: u64,
 }
 public struct EventSettingsUpdated has copy, drop {}
@@ -392,12 +392,12 @@ public fun invest<C, T>(
 
     let total_investment = if (pod.investments.contains(investor)) {
         let ir = &mut pod.investments[investor];
-        ir.investmnet = ir.investmnet + actual_investment;
+        ir.investment = ir.investment + actual_investment;
         ir.allocation = ir.allocation + additional_tokens;
-        ir.investmnet
+        ir.investment
     } else {
         let allocation = InvestorRecord {
-            investmnet: actual_investment,
+            investment: actual_investment,
             allocation: additional_tokens,
             claimed_tokens: 0,
             cancelled: false,
@@ -433,14 +433,14 @@ public fun cancel_subscription<C, T>(
     let ir = &mut pod.investments[investor];
     assert!(!ir.cancelled, E_INVESTMENT_CANCELLED);
 
-    let orig_investment = ir.investmnet;
+    let orig_investment = ir.investment;
     let orig_allocation = ir.allocation;
     // NOTE: no need to use higher precision because the cancel_subscription_keep is small
-    ir.investmnet = (orig_investment * settings.cancel_subscription_keep) / PERMILLE;
+    ir.investment = (orig_investment * settings.cancel_subscription_keep) / PERMILLE;
     ir.allocation = (orig_allocation * settings.cancel_subscription_keep) / PERMILLE;
     ir.cancelled = true;
 
-    let refunded = orig_investment - ir.investmnet;
+    let refunded = orig_investment - ir.investment;
     pod.params.total_raised = pod.params.total_raised - refunded;
     let allocation_reduction = orig_allocation - ir.allocation;
     pod.total_allocated = pod.total_allocated - allocation_reduction;
@@ -449,7 +449,7 @@ public fun cancel_subscription<C, T>(
         pod_id,
         investor,
         refunded,
-        investmnet: ir.investmnet,
+        investment: ir.investment,
         allocation: ir.allocation,
     });
     coin::take(&mut pod.funds_vault, refunded, ctx)
@@ -494,7 +494,7 @@ public fun exit_investment<C, T>(
 
     let (vested_tokens, funds_unlocked) = if (status == STATUS_GRACE) {
         let vested_tokens = ratio_ext_pm(ir.allocation, pod.params.exit_small_fee_pm);
-        // let funds_unlocked = ratio_ext_pm(ir.investmnet, pod.params.exit_small_fee_pm);
+        // let funds_unlocked = ratio_ext_pm(ir.investment, pod.params.exit_small_fee_pm);
         // (vested_tokens, funds_unlocked)
         (vested_tokens, 0)
     } else {
@@ -510,7 +510,7 @@ public fun exit_investment<C, T>(
             time_elapsed,
             pod.params.vesting_duration,
             pod.params.immediate_unlock_pm,
-            ir.investmnet,
+            ir.investment,
         );
         (vested_tokens, funds_unlocked)
     };
@@ -521,7 +521,7 @@ public fun exit_investment<C, T>(
         pod.params.immediate_unlock_pm
     };
 
-    let remaining_investment = ir.investmnet - funds_unlocked;
+    let remaining_investment = ir.investment - funds_unlocked;
     let fee_amount = ratio_ext_pm(remaining_investment, fee_pm);
     assert!(remaining_investment > fee_amount, E_NOTHING_TO_EXIT);
 
@@ -562,7 +562,7 @@ public fun failed_pod_refund<C, T>(
     let ir = pod.investments.remove(investor);
 
     emit(EventFailedPodRefund { pod_id: object::id(pod), investor });
-    coin::take(&mut pod.funds_vault, ir.investmnet, ctx)
+    coin::take(&mut pod.funds_vault, ir.investment, ctx)
 }
 
 //
