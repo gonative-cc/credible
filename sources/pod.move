@@ -492,6 +492,7 @@ public fun exit_investment<C, T>(
     let status = pod.pod_status(clock);
     assert!(status == STATUS_GRACE || status == STATUS_VESTING, E_POD_NOT_VESTING);
     let investor = ctx.sender();
+    // we delete the investment record t oassure user won't be able to exit 2 times.
     let ir = pod.investments.remove(investor);
     assert!(ir.claimed_tokens < ir.allocation, E_ALREADY_EXITED);
 
@@ -539,8 +540,6 @@ public fun exit_investment<C, T>(
     if (unvested_tokens > 0) {
         pod.total_allocated = pod.total_allocated - unvested_tokens;
     };
-
-    // TODO: make sure user can't exit 2 times
 
     emit(EventExitInvestment {
         pod_id: object::id(pod),
