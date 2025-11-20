@@ -331,7 +331,7 @@ fun test_max_goal_reached_early() {
     // Should have 100_000 excess
     assert_u64_eq(excess2.value(), 100_000);
     let params = pod.get_pod_params();
-    assert_u64_eq(params.get_pod_total_raised(), MAX_GOAL);
+    assert_u64_eq(pod.get_pod_total_raised(), MAX_GOAL);
     assert_u64_eq(params.get_pod_subscription_end(), clock.timestamp_ms());
     transfer::public_transfer(excess2, @0x0);
 
@@ -398,8 +398,7 @@ fun test_multiple_investments_same_investor() {
     transfer::public_transfer(excess2, @0x0);
 
     // Total should be combined
-    let params = pod.get_pod_params();
-    assert_u64_eq(params.get_pod_total_raised(), 150_000);
+    assert_u64_eq(pod.get_pod_total_raised(), 150_000);
 
     cleanup(clock, pod, settings);
     scenario.end();
@@ -437,8 +436,7 @@ fun test_cancel_subscription() {
     transfer::public_transfer(refund, @0x0);
 
     // Total raised should be reduced
-    let params = pod.get_pod_params();
-    assert_u64_eq(params.get_pod_total_raised(), kept);
+    assert_u64_eq(pod.get_pod_total_raised(), kept);
 
     cleanup(clock, pod, settings);
     scenario.end();

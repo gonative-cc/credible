@@ -87,10 +87,13 @@ public struct Pod<phantom C, phantom T> has key {
     token_vault: Balance<T>,
     funds_vault: Balance<C>,
     total_allocated: u64,
+    total_raised: u64,
     investments: Table<address, InvestorRecord>,
     founder_claimed_funds: u64,
     params: PodParams,
 }
+
+// --- Settings Structs ---
 
 /// Helper struct to store Pod parameters
 public struct PodParams has copy, drop, store {
@@ -104,10 +107,7 @@ public struct PodParams has copy, drop, store {
     immediate_unlock_pm: u64,
     grace_fee_pm: u64,
     small_fee_duration: u64,
-    total_raised: u64,
 }
-
-// --- Settings Structs ---
 
 /// Shared object containing all platform parameters.
 public struct GlobalSettings has key {
@@ -269,7 +269,6 @@ public fun create_pod<C, T>(
         immediate_unlock_pm,
         grace_fee_pm: settings.grace_fee_pm,
         small_fee_duration: settings.small_fee_duration,
-        total_raised: 0,
     };
 
     let pod = Pod<C, T> {
@@ -281,6 +280,7 @@ public fun create_pod<C, T>(
         funds_vault: balance::zero<C>(),
         investments: table::new(ctx),
         total_allocated: 0,
+        total_raised: 0,
         founder_claimed_funds: 0,
         params,
     };
@@ -296,9 +296,9 @@ public fun create_pod<C, T>(
 
 // --- Public View Functions ---
 
-public fun get_pod_params<C, T>(pod: &Pod<C, T>): PodParams {
-    pod.params
-}
+public fun get_pod_params<C, T>(pod: &Pod<C, T>): PodParams { pod.params }
+
+public fun get_pod_total_raised<C, T>(p: &Pod<C, T>): u64 { p.total_raised }
 
 public fun get_pod_token_price(p: &PodParams): u64 { p.token_price }
 
@@ -320,23 +320,18 @@ public fun get_pod_grace_fee_pm(p: &PodParams): u64 { p.grace_fee_pm }
 
 public fun get_pod_small_fee_duration(p: &PodParams): u64 { p.small_fee_duration }
 
-// TODO: move to Pod
-public fun get_pod_total_raised(p: &PodParams): u64 { p.total_raised }
-
 public fun pod_token_vault_value<C, T>(pod: &Pod<C, T>): u64 {
     pod.token_vault.value()
 }
 
-public fun pod_total_allocated<C, T>(pod: &Pod<C, T>): u64 {
-    pod.total_allocated
-}
+public fun pod_total_allocated<C, T>(pod: &Pod<C, T>): u64 { pod.total_allocated }
 
 public fun pod_status<C, T>(pod: &Pod<C, T>, clock: &Clock): u8 {
     let now = clock.timestamp_ms();
     if (now < pod.params.subscription_start) {
         STATUS_INACTIVE
     } else if (now >= pod.params.subscription_end) {
-        if (pod.params.total_raised < pod.params.min_goal) {
+        if (pod.total_raised < pod.params.min_goal) {
             STATUS_FAILED
         } else {
             let grace_end = pod.params.subscription_end + pod.params.small_fee_duration;
@@ -366,12 +361,12 @@ public fun invest<C, T>(
     ctx: &mut TxContext,
 ): Coin<C> {
     assert!(pod_status(pod, clock) == STATUS_SUBSCRIPTION, E_POD_NOT_SUBSCRIPTION);
-    assert!(pod.params.total_raised < pod.params.max_goal, E_MAX_GOAL_REACHED);
+    assert!(pod.total_raised < pod.params.max_goal, E_MAX_GOAL_REACHED);
 
     let investment_amount = investment.value();
     assert!(investment_amount > 0, E_ZERO_INVESTMENT);
     let investor = ctx.sender();
-    let new_total_raised = pod.params.total_raised + investment_amount;
+    let new_total_raised = pod.total_raised + investment_amount;
 
     let (actual_investment, excess_coin) = if (new_total_raised > pod.params.max_goal) {
         let excess = new_total_raised - pod.params.max_goal;
@@ -386,7 +381,7 @@ public fun invest<C, T>(
         actual_investment,
         pod.params.token_price,
     );
-    pod.params.total_raised = pod.params.total_raised + actual_investment;
+    pod.total_raised = pod.total_raised + actual_investment;
     pod.total_allocated = pod.total_allocated + additional_tokens;
     pod.funds_vault.join(investment.into_balance());
 
@@ -408,7 +403,7 @@ public fun invest<C, T>(
 
     emit(EventInvestmentMade { pod_id: object::id(pod), investor, total_investment });
 
-    if (pod.params.total_raised >= pod.params.max_goal) {
+    if (pod.total_raised >= pod.params.max_goal) {
         // This triggers vesting start
         pod.params.subscription_end = clock::timestamp_ms(clock);
         emit(EventPodMaxGoal { pod_id: object::id(pod) });
@@ -441,7 +436,7 @@ public fun cancel_subscription<C, T>(
     ir.cancelled = true;
 
     let refunded = orig_investment - ir.investment;
-    pod.params.total_raised = pod.params.total_raised - refunded;
+    pod.total_raised = pod.total_raised - refunded;
     let allocation_reduction = orig_allocation - ir.allocation;
     pod.total_allocated = pod.total_allocated - allocation_reduction;
 
@@ -494,11 +489,8 @@ public fun exit_investment<C, T>(
 
     let (vested_tokens, funds_unlocked) = if (status == STATUS_GRACE) {
         let vested_tokens = ratio_ext_pm(ir.allocation, pod.params.grace_fee_pm);
-        // let funds_unlocked = ratio_ext_pm(ir.investment, pod.params.grace_fee_pm);
-        // (vested_tokens, funds_unlocked)
         (vested_tokens, 0)
     } else {
-        // TODO: FIX: - elapsed_vesting_time should return a proper value (should start after grace)
         let time_elapsed = pod.elapsed_vesting_time(clock);
         let vested_tokens = calculate_vested_tokens(
             time_elapsed,
@@ -627,7 +619,7 @@ public fun calculate_founder_claimable<C, T>(pod: &Pod<C, T>, clock: &Clock): u6
         pod.elapsed_vesting_time(clock),
         pod.params.vesting_duration,
         pod.params.immediate_unlock_pm,
-        pod.params.total_raised,
+        pod.total_raised,
     )
 }
 
