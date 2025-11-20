@@ -18,7 +18,8 @@ const PERMILLE_U128: u128 = 1000; // For permille calculations
 const STATUS_INACTIVE: u8 = 0;
 const STATUS_SUBSCRIPTION: u8 = 1;
 const STATUS_FAILED: u8 = 2;
-const STATUS_VESTING: u8 = 3;
+const STATUS_GRACE: u8 = 3;
+const STATUS_VESTING: u8 = 4;
 
 // --- Error Codes ---
 const E_INVALID_PARAMS: u64 = 0;
@@ -135,6 +136,8 @@ public fun get_global_settings(
         settings.treasury,
     )
 }
+
+public fun get_exit_small_fee_pm(s: &GlobalSettings): u64 { s.exit_small_fee_pm }
 
 // --- Platform Admin Functions ---
 public fun update_settings(
@@ -297,27 +300,28 @@ public fun get_pod_params<C, T>(pod: &Pod<C, T>): PodParams {
     pod.params
 }
 
-public fun get_token_price(params: &PodParams): u64 { params.token_price }
+public fun get_pod_token_price(p: &PodParams): u64 { p.token_price }
 
-public fun get_price_multiplier(params: &PodParams): u64 { params.price_multiplier }
+public fun get_pod_price_multiplier(p: &PodParams): u64 { p.price_multiplier }
 
-public fun get_min_goal(params: &PodParams): u64 { params.min_goal }
+public fun get_pod_min_goal(p: &PodParams): u64 { p.min_goal }
 
-public fun get_max_goal(params: &PodParams): u64 { params.max_goal }
+public fun get_pod_max_goal(p: &PodParams): u64 { p.max_goal }
 
-public fun get_subscription_start(params: &PodParams): u64 { params.subscription_start }
+public fun get_pod_subscription_start(p: &PodParams): u64 { p.subscription_start }
 
-public fun get_subscription_end(params: &PodParams): u64 { params.subscription_end }
+public fun get_pod_subscription_end(p: &PodParams): u64 { p.subscription_end }
 
-public fun get_vesting_duration(params: &PodParams): u64 { params.vesting_duration }
+public fun get_pod_vesting_duration(p: &PodParams): u64 { p.vesting_duration }
 
-public fun get_immediate_unlock_pm(params: &PodParams): u64 { params.immediate_unlock_pm }
+public fun get_pod_immediate_unlock_pm(p: &PodParams): u64 { p.immediate_unlock_pm }
 
-public fun get_exit_small_fee_pm(params: &PodParams): u64 { params.exit_small_fee_pm }
+public fun get_pod_exit_small_fee_pm(p: &PodParams): u64 { p.exit_small_fee_pm }
 
-public fun get_small_fee_duration(params: &PodParams): u64 { params.small_fee_duration }
+public fun get_pod_small_fee_duration(p: &PodParams): u64 { p.small_fee_duration }
 
-public fun get_total_raised(params: &PodParams): u64 { params.total_raised }
+// TODO: move to Pod
+public fun get_pod_total_raised(p: &PodParams): u64 { p.total_raised }
 
 public fun pod_token_vault_value<C, T>(pod: &Pod<C, T>): u64 {
     pod.token_vault.value()
@@ -332,7 +336,12 @@ public fun pod_status<C, T>(pod: &Pod<C, T>, clock: &Clock): u8 {
     if (now < pod.params.subscription_start) {
         STATUS_INACTIVE
     } else if (now >= pod.params.subscription_end) {
-        if (pod.params.total_raised < pod.params.min_goal) STATUS_FAILED else STATUS_VESTING
+        if (pod.params.total_raised < pod.params.min_goal) {
+            STATUS_FAILED
+        } else {
+            let grace_end = pod.params.subscription_end + pod.params.small_fee_duration;
+            if (now < grace_end) STATUS_GRACE else STATUS_VESTING
+        }
     } else {
         STATUS_SUBSCRIPTION
     }
@@ -462,6 +471,7 @@ public fun investor_claim_tokens<C, T>(
         pod.params.immediate_unlock_pm,
         ir.allocation,
     );
+
     let to_claim = vested_tokens - ir.claimed_tokens;
     assert!(to_claim > 0, E_NOTHING_TO_CLAIM);
 
@@ -476,27 +486,36 @@ public fun exit_investment<C, T>(
     clock: &Clock,
     ctx: &mut TxContext,
 ): (Coin<C>, Coin<T>) {
-    assert!(pod_status(pod, clock) == STATUS_VESTING, E_POD_NOT_VESTING);
+    let status = pod.pod_status(clock);
+    assert!(status == STATUS_GRACE || status == STATUS_VESTING, E_POD_NOT_VESTING);
     let investor = ctx.sender();
     let ir = pod.investments.remove(investor);
     assert!(ir.claimed_tokens < ir.allocation, E_ALREADY_EXITED);
 
-    let time_elapsed = pod.elapsed_vesting_time(clock);
-    let vested_tokens = calculate_vested_tokens(
-        time_elapsed,
-        pod.params.vesting_duration,
-        pod.params.immediate_unlock_pm,
-        ir.allocation,
-    );
-    let funds_unlocked = calculate_vested_tokens(
-        time_elapsed,
-        pod.params.vesting_duration,
-        pod.params.immediate_unlock_pm,
-        ir.investmnet,
-    );
-    let fee_pm = if (
-        clock.timestamp_ms() < pod.params.subscription_end + pod.params.small_fee_duration
-    ) {
+    let (vested_tokens, funds_unlocked) = if (status == STATUS_GRACE) {
+        let vested_tokens = ratio_ext_pm(ir.allocation, pod.params.exit_small_fee_pm);
+        // let funds_unlocked = ratio_ext_pm(ir.investmnet, pod.params.exit_small_fee_pm);
+        // (vested_tokens, funds_unlocked)
+        (vested_tokens, 0)
+    } else {
+        // TODO: FIX: - elapsed_vesting_time should return a proper value (should start after grace)
+        let time_elapsed = pod.elapsed_vesting_time(clock);
+        let vested_tokens = calculate_vested_tokens(
+            time_elapsed,
+            pod.params.vesting_duration,
+            pod.params.immediate_unlock_pm,
+            ir.allocation,
+        );
+        let funds_unlocked = calculate_vested_tokens(
+            time_elapsed,
+            pod.params.vesting_duration,
+            pod.params.immediate_unlock_pm,
+            ir.investmnet,
+        );
+        (vested_tokens, funds_unlocked)
+    };
+
+    let fee_pm = if (status == STATUS_GRACE) {
         pod.params.exit_small_fee_pm
     } else {
         pod.params.immediate_unlock_pm
@@ -520,6 +539,8 @@ public fun exit_investment<C, T>(
     if (unvested_tokens > 0) {
         pod.total_allocated = pod.total_allocated - unvested_tokens;
     };
+
+    // TODO: make sure user can't exit 2 times
 
     emit(EventExitInvestment {
         pod_id: object::id(pod),
@@ -637,6 +658,7 @@ public fun calculate_vested_tokens(
 public(package) fun elapsed_vesting_time<C, T>(pod: &Pod<C, T>, clock: &Clock): u64 {
     assert!(pod_status(pod, clock) == STATUS_VESTING, E_POD_NOT_VESTING);
     let now = clock.timestamp_ms();
+    // TODO Vesting should start after the grace period
     now - pod.params.subscription_end
 }
 
@@ -658,3 +680,14 @@ public fun ratio_ext_pm(x: u64, numerator: u64): u64 {
 public fun init_for_tests(ctx: &mut TxContext) {
     init(ctx);
 }
+
+#[test_only]
+public fun status_inactive(): u8 { STATUS_INACTIVE }
+#[test_only]
+public fun status_subscription(): u8 { STATUS_SUBSCRIPTION }
+#[test_only]
+public fun status_failed(): u8 { STATUS_FAILED }
+#[test_only]
+public fun status_grace(): u8 { STATUS_GRACE }
+#[test_only]
+public fun status_vesting(): u8 { STATUS_VESTING }

@@ -55,23 +55,24 @@ BTCFi ecosystem face a critical bottleneck:
 
 ```mermaid
 graph TD
-    A[Founders create Pod<br>supply tokens and pays the fee] --> C[Subscription phase begins]
-    C --> D{Min goal reached?}
-    D -->|No| E[Pod ends - refunds issued]
-    D -->|Yes| F{Max goal reached?}
-    F -->|No| G[Continue accepting investments]
-    F -->|Yes| H[Subscription ends early]
-    G --> I[Subscription period ends]
-    H --> J[Vesting begins]
-    I --> J
-    J --> K[Immediate unlock distribution]
-    K --> L[Linear vesting period]
-    L --> M[Investors can claim vested tokens]
-    M --> N{Investor wants to exit?}
-    N -->|Yes| O[Calculate exit fee]
-    O --> P[Process exit]
-    N -->|No| M
-    J --> X[Investors Claim Tokens]
+     A[Founders create Pod<br>supply tokens and pays the fee] --> C[Subscription phase begins]
+     C --> D{Min goal reached?}
+     D -->|No| E[Pod ends - refunds issued]
+     D -->|Yes| F{Max goal reached?}
+     F -->|No| G[Continue accepting investments]
+     F -->|Yes| H[Subscription ends early]
+     G --> I[Subscription period ends]
+     H --> J[Grace period begins]
+     I --> J
+     J --> K[Vesting begins]
+     K --> L[Immediate unlock distribution]
+     L --> M[Linear vesting period]
+     M --> N[Investors can claim vested tokens]
+     N --> O{Investor wants to exit?}
+     O -->|Yes| P[Calculate exit fee]
+     P --> Q[Process exit]
+     O -->|No| N
+     K --> R[Investors Claim Tokens]
 ```
 
 ### Objects
@@ -124,6 +125,15 @@ Once a pod is created, anyone can subscribe for investment during the subscripti
 During the subscription phase investors can cancel their subscription by calling `cancel_subscription`. `investment × cancel_subscription_keep` will be kept as an investment. This will be fully refundable if the Pod didn't reach the `min_investment_goal`. Otherwise, this will be kept as a reduced investment.
 NOTE: investor can cancel the subscription only once. If an investor cancels his subscription, and then invest more, then he can't cancel it again.
 
+### Phase 2.5: Grace Period
+
+Starts immediately after the subscription period ends and the minimum investment goal is reached. The grace period lasts for `small_fee_duration` (global setting).
+
+During the grace period:
+- Tokens are not yet vesting; investors cannot claim tokens.
+- Founders cannot claim funds.
+- Investors can exit their investment with the reduced `exit_small_fee` and will be available to the Founders.
+
 ### Phase 3: Vesting and Token Distribution
 
 Starts when the minimum investment goal is reached and the subscription period ended. Let `F` be the total amount of funds raised.
@@ -141,23 +151,26 @@ Progress Update: Founders should provide regular progress updates through the li
 
 ### Exit Mechanism
 
-At any time, an investor can exit their investment if they believe the team is not meeting expectations or need liquidity. Investor is charged a fee when exiting, to protect the founders from a massive exit:
+At any time during the grace period or vesting, an investor can exit their investment if they believe the team is not meeting expectations or need liquidity. Investor is charged a fee when exiting, to protect the founders from a massive exit:
 
-- If the exit occurs during `small_fee_duration` after vesting starts: `exit_small_fee` is charged.
-- After `small_fee_duration`: the fee is charged based on the pod `immediate_unlock` value.
+- If the exit occurs during the grace period: `exit_small_fee` is charged.
+- After that: the `exit_fee` is charged based on the unvested amount.
 
 **Exit Calculation Details:**
-Let: `I` = Amount invested by the investor, `A` = token allocation for the investor, `Vd` = vesting duration, `Ts` = vesting start time, `T` = exit time.
-
-The vested portion at time `T` is: `vested_portion = (T-Ts)/Vd`.
+Let: `I` = Amount invested by the investor, `A` = token allocation for the investor, `Vd` = vesting duration, `Ts` = vesting start time, `T` = exit time. During the grace period `vested_portion = 0`.
 
 ```
-fee = if(T <= Ts + small_fee_duration) exit_small_fee  else  exit_fee
-claim_back = I × (1 - immediate_unlock) × (1 - vested_portion) × (1 - fee)
-tokens_received = A × (1 - immediate_unlock) × (1 - vested_portion)
+if (now <= grace_end) {
+    investment_claim_back = I × (1 - exit_small_fee)
+    tokens_received = A × exit_small_fee
+} else {
+    vested_portion = (T-Ts)/Vd
+    investment_claim_back = I × (1 - immediate_unlock) × (1 - vested_portion) × (1 - exit_fee)
+    tokens_received = A × (1 - immediate_unlock) × (1 - vested_portion)
+}
 ```
 
-Remaining unvested tokens are returned to the founders.
+Remaining unvested tokens and collected is returned to the founders.
 
 ## Consequences
 

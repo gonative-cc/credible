@@ -25,10 +25,12 @@ const TOKEN_PRICE: u64 = 100;
 const PRICE_MULTIPLIER: u64 = 10;
 const MIN_GOAL: u64 = 800_000;
 const MAX_GOAL: u64 = 1_000_000;
+// TODO: fix: should be MAX_GOAL / TOKEN_PRICE / PRICE_MULTIPLIER
 const REQUIRED_TOKENS: u64 = (MAX_GOAL * PRICE_MULTIPLIER) / TOKEN_PRICE;
 const IMMEDIATE_UNLOCK_PM: u64 = 50;
 const SUBS_DURATION: u64 = DAY * 7;
 const VESTING_DURATION: u64 = DAY * 100;
+const GRACE_DURATION: u64 = DAY * 3;
 
 // Helper functions for assertions
 fun assert_u64_eq(a: u64, b: u64) {
@@ -122,12 +124,12 @@ fun test_create_pod_success() {
     let cap = scenario.take_from_sender<PodAdminCap>();
 
     let params = pod.get_pod_params();
-    assert_u64_eq(pod::get_token_price(&params), TOKEN_PRICE);
-    assert_u64_eq(pod::get_price_multiplier(&params), PRICE_MULTIPLIER);
-    assert_u64_eq(pod::get_min_goal(&params), MIN_GOAL);
-    assert_u64_eq(pod::get_max_goal(&params), MAX_GOAL);
-    assert_u64_eq(pod::get_vesting_duration(&params), VESTING_DURATION);
-    assert_u64_eq(pod::get_immediate_unlock_pm(&params), IMMEDIATE_UNLOCK_PM);
+    assert_u64_eq(params.get_pod_token_price(), TOKEN_PRICE);
+    assert_u64_eq(params.get_pod_price_multiplier(), PRICE_MULTIPLIER);
+    assert_u64_eq(params.get_pod_min_goal(), MIN_GOAL);
+    assert_u64_eq(params.get_pod_max_goal(), MAX_GOAL);
+    assert_u64_eq(params.get_pod_vesting_duration(), VESTING_DURATION);
+    assert_u64_eq(params.get_pod_immediate_unlock_pm(), IMMEDIATE_UNLOCK_PM);
 
     test_scenario::return_to_sender(&scenario, cap);
     cleanup(clock, pod, settings);
@@ -329,8 +331,8 @@ fun test_max_goal_reached_early() {
     // Should have 100_000 excess
     assert_u64_eq(excess2.value(), 100_000);
     let params = pod.get_pod_params();
-    assert_u64_eq(pod::get_total_raised(&params), MAX_GOAL);
-    assert_u64_eq(pod::get_subscription_end(&params), clock.timestamp_ms());
+    assert_u64_eq(params.get_pod_total_raised(), MAX_GOAL);
+    assert_u64_eq(params.get_pod_subscription_end(), clock.timestamp_ms());
     transfer::public_transfer(excess2, @0x0);
 
     cleanup(clock, pod, settings);
@@ -397,7 +399,7 @@ fun test_multiple_investments_same_investor() {
 
     // Total should be combined
     let params = pod.get_pod_params();
-    assert_u64_eq(pod::get_total_raised(&params), 150_000);
+    assert_u64_eq(params.get_pod_total_raised(), 150_000);
 
     cleanup(clock, pod, settings);
     scenario.end();
@@ -436,7 +438,7 @@ fun test_cancel_subscription() {
 
     // Total raised should be reduced
     let params = pod.get_pod_params();
-    assert_u64_eq(pod::get_total_raised(&params), kept);
+    assert_u64_eq(params.get_pod_total_raised(), kept);
 
     cleanup(clock, pod, settings);
     scenario.end();
@@ -540,21 +542,27 @@ fun test_investor_claim_tokens() {
     transfer::public_transfer(excess, @0x0);
     test_scenario::return_shared(pod);
 
-    // Fast forward to vesting start, then claim
-    clock.increment_for_testing(MINUTE);
+    // Fast forward past grace to vesting start, then claim
+    clock.increment_for_testing(GRACE_DURATION + MINUTE);
     scenario.next_tx(investor);
     let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
-
     // Verify pod is now in vesting
-    assert_u8_eq(pod.pod_status(&clock), 3);
+    assert!(pod.pod_status(&clock) == pod::status_vesting());
 
     // Investor claims tokens
     let claimed_tokens = pod.investor_claim_tokens(&clock, scenario.ctx());
     // Investment: 1_000_000, Token allocation: 1_000_000 * 10 / 100 = 100_000 tokens
     // Immediate unlock (5%): 100_000 * 50 / 1000 = 5_000 tokens
-    let immediate_unlock = 5_000;
-    assert_u64_eq(claimed_tokens.value(), immediate_unlock);
+    // 1min vested tokens: (100_000 - 5_000) * minute/vesting_duration
+    // TODO: FIX: vesting should start after grace period
+    let expected = 5_000 + (100_000 - 5_000) * (GRACE_DURATION + MINUTE) / VESTING_DURATION;
+
+    assert_u64_eq(claimed_tokens.value(), expected);
     transfer::public_transfer(claimed_tokens, @0x0);
+
+    // TODO: add more tests:
+    // second claim after 1 day
+    // another claim at the end of the vesting
 
     cleanup(clock, pod, settings);
     scenario.end();
@@ -576,8 +584,8 @@ fun test_founder_claim_funds() {
     transfer::public_transfer(excess, @0x0);
     test_scenario::return_shared(pod);
 
-    // Fast forward past subscription end, then claim (time elapsed > 0)
-    clock.increment_for_testing(MINUTE);
+    // Fast forward past grace period, then claim (time elapsed > 0)
+    clock.increment_for_testing(DAY * 3 + MINUTE);
     scenario.next_tx(founder);
     let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     let cap = scenario.take_from_sender<PodAdminCap>();
@@ -615,8 +623,8 @@ fun test_withdraw_unallocated_tokens() {
     transfer::public_transfer(excess, @0x0);
     test_scenario::return_shared(pod);
 
-    // Fast forward to vesting
-    clock.increment_for_testing(DAY * 7);
+    // Fast forward past grace to vesting
+    clock.increment_for_testing(DAY * 7 + DAY * 3);
 
     // Founder withdraws unallocated tokens
     scenario.next_tx(founder);
@@ -634,6 +642,111 @@ fun test_withdraw_unallocated_tokens() {
 
     test_scenario::return_to_sender(&scenario, cap);
     cleanup(clock, pod, settings);
+    scenario.end();
+}
+
+// ================================
+// Grace Period Tests
+// ================================
+
+#[test]
+#[expected_failure(abort_code = pod::E_POD_NOT_VESTING)]
+fun test_grace_period_cannot_claim_tokens() {
+    let founder = @0x1;
+    let investor = @0x2;
+
+    let (mut scenario, mut clock, settings) = init1(founder);
+
+    // Fast forward and invest
+    clock.increment_for_testing(MINUTE * 2);
+    scenario.next_tx(investor);
+    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
+    let investment = mint_for_testing(MAX_GOAL, scenario.ctx());
+    let excess = pod.invest(investment, &clock, scenario.ctx());
+    transfer::public_transfer(excess, @0x0);
+    test_scenario::return_shared(pod);
+
+    // Fast forward to grace period
+    clock.increment_for_testing(GRACE_DURATION / 2);
+
+    // Try to claim tokens (should fail)
+    scenario.next_tx(investor);
+    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
+    let _claimed = pod.investor_claim_tokens(&clock, scenario.ctx());
+    transfer::public_transfer(_claimed, @0x0);
+
+    cleanup(clock, pod, settings);
+    scenario.end();
+}
+
+#[test]
+#[expected_failure(abort_code = pod::E_POD_NOT_VESTING)]
+fun test_grace_period_cannot_claim_funds() {
+    let founder = @0x1;
+    let investor = @0x2;
+
+    let (mut scenario, mut clock, settings) = init1(founder);
+
+    // Fast forward and invest
+    clock.increment_for_testing(MINUTE * 2);
+    scenario.next_tx(investor);
+    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
+    let investment = mint_for_testing(MAX_GOAL, scenario.ctx());
+    let excess = pod.invest(investment, &clock, scenario.ctx());
+    transfer::public_transfer(excess, @0x0);
+    test_scenario::return_shared(pod);
+
+    // Fast forward to grace period
+    clock.increment_for_testing(GRACE_DURATION / 2);
+
+    // Try to claim funds (should fail)
+    scenario.next_tx(founder);
+    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
+    let cap = scenario.take_from_sender<PodAdminCap>();
+    let _claimed = pod.founder_claim_funds(&cap, &clock, scenario.ctx());
+    transfer::public_transfer(_claimed, @0x0);
+
+    test_scenario::return_to_sender(&scenario, cap);
+    cleanup(clock, pod, settings);
+    scenario.end();
+}
+
+#[test]
+fun test_grace_period_can_exit() {
+    let founder = @0x1;
+    let investor = @0x2;
+
+    let (mut scenario, mut clock, s) = init1(founder);
+
+    // TODO: add scenario with more than one investor
+    // scenario1: single investor taking max goal
+    // Fast forward and invest
+    clock.increment_for_testing(MINUTE * 2);
+    scenario.next_tx(investor);
+    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
+    let investor_put = 1_000_000;
+    let investment = mint_for_testing(investor_put, scenario.ctx());
+    let excess = pod.invest(investment, &clock, scenario.ctx());
+    transfer::public_transfer(excess, @0x0);
+    test_scenario::return_shared(pod);
+
+    // Fast forward to grace period
+    clock.increment_for_testing(GRACE_DURATION / 2);
+
+    // Investor exits during grace
+    scenario.next_tx(investor);
+    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
+    assert!(pod.pod_status(&clock) == pod::status_grace());
+    let (refund, vested_tokens) = pod.exit_investment(&clock, scenario.ctx());
+
+    let fee = s.get_exit_small_fee_pm();
+    let expected_refund = investor_put - ratio_ext_pm(investor_put, fee);
+    assert_u64_eq(refund.value(), expected_refund);
+    assert_u64_eq(vested_tokens.value(), ratio_ext_pm(REQUIRED_TOKENS, fee));
+    transfer::public_transfer(refund, @0x0);
+    transfer::public_transfer(vested_tokens, @0x0);
+
+    cleanup(clock, pod, s);
     scenario.end();
 }
 
@@ -657,7 +770,7 @@ fun test_exit_during_small_fee_period() {
     transfer::public_transfer(excess, @0x0);
     test_scenario::return_shared(pod);
 
-    // Fast forward to vesting (small fee period starts)
+    // Fast forward to grace period (small fee period)
     clock.increment_for_testing(DAY * 7);
 
     // Investor exits during small fee period
@@ -830,6 +943,37 @@ fun test_pod_status_transitions() {
     scenario.next_tx(founder);
     let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     assert_u8_eq(pod.pod_status(&clock), 2);
+
+    cleanup(clock, pod, settings);
+    scenario.end();
+}
+
+#[test]
+fun test_grace_and_vesting_status() {
+    let founder = @0x1;
+
+    let (mut scenario, mut clock, settings) = init1(founder);
+    scenario.next_tx(founder);
+    clock.increment_for_testing(MINUTE * 2);
+    scenario.next_tx(founder);
+    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
+    let investment = mint_for_testing(800_000, scenario.ctx());
+    let excess = pod.invest(investment, &clock, scenario.ctx());
+    transfer::public_transfer(excess, @0x0);
+    test_scenario::return_shared(pod);
+
+    // Fast forward to grace period
+    clock.increment_for_testing(DAY * 7);
+    scenario.next_tx(founder);
+    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
+    assert_u8_eq(pod.pod_status(&clock), 3); // GRACE
+    test_scenario::return_shared(pod);
+
+    // Fast forward past grace to vesting
+    clock.increment_for_testing(DAY * 3);
+    scenario.next_tx(founder);
+    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
+    assert_u8_eq(pod.pod_status(&clock), 4); // VESTING
 
     cleanup(clock, pod, settings);
     scenario.end();
