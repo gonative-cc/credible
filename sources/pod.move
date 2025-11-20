@@ -47,6 +47,7 @@ fun init(ctx: &mut TxContext) {
         max_immediate_unlock_pm: 100, // 10.0%
         min_vesting_duration: day * 30 * 3, // 3 months
         min_subscription_duration: day * 7,
+        max_subscription_duration: day * 30, // 30 days
         grace_fee_pm: 8, // 0.8%
         grace_duration: 1000 * 60 * 60 * 24 * 3, // 3 days
         cancel_subscription_keep: 1, // 0.1%
@@ -115,6 +116,7 @@ public struct GlobalSettings has key {
     max_immediate_unlock_pm: u64,
     min_vesting_duration: u64,
     min_subscription_duration: u64,
+    max_subscription_duration: u64,
     grace_fee_pm: u64,
     grace_duration: u64,
     cancel_subscription_keep: u64,
@@ -124,11 +126,12 @@ public struct GlobalSettings has key {
 
 public fun get_global_settings(
     settings: &GlobalSettings,
-): (u64, u64, u64, u64, u64, u64, u64, address) {
+): (u64, u64, u64, u64, u64, u64, u64, u64, address) {
     (
         settings.max_immediate_unlock_pm,
         settings.min_vesting_duration,
         settings.min_subscription_duration,
+        settings.max_subscription_duration,
         settings.grace_fee_pm,
         settings.grace_duration,
         settings.cancel_subscription_keep,
@@ -146,6 +149,7 @@ public fun update_settings(
     max_immediate_unlock_pm: Option<u64>,
     min_vesting_duration: Option<u64>,
     min_subscription_duration: Option<u64>,
+    max_subscription_duration: Option<u64>,
     grace_fee_pm: Option<u64>,
     grace_duration: Option<u64>,
     cancel_subscription_keep: Option<u64>,
@@ -163,6 +167,9 @@ public fun update_settings(
     };
     if (option::is_some(&min_subscription_duration)) {
         settings.min_subscription_duration = option::destroy_some(min_subscription_duration);
+    };
+    if (option::is_some(&max_subscription_duration)) {
+        settings.max_subscription_duration = option::destroy_some(max_subscription_duration);
     };
 
     if (option::is_some(&grace_fee_pm)) {
@@ -241,6 +248,7 @@ public fun create_pod<C, T>(
         min_goal > 0 &&
             max_goal >= min_goal &&
             subscription_duration >= settings.min_subscription_duration &&
+            subscription_duration <= settings.max_subscription_duration &&
             vesting_duration >= settings.min_vesting_duration &&
             immediate_unlock_pm <= settings.max_immediate_unlock_pm &&
         subscription_start > clock.timestamp_ms() &&

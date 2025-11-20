@@ -195,6 +195,25 @@ fun test_create_pod_subscription_duration_too_short() {
 
 #[test]
 #[expected_failure(abort_code = pod::E_INVALID_PARAMS)]
+fun test_create_pod_subscription_duration_too_long() {
+    let (mut scenario, c, mut settings) = init_t(
+        @0x1,
+        REQUIRED_TOKENS,
+        TOKEN_PRICE,
+        PRICE_MULTIPLIER,
+        MIN_GOAL,
+        MAX_GOAL,
+        DAY * 31, // subscription duration > 30 days
+        VESTING_DURATION,
+        IMMEDIATE_UNLOCK_PM,
+    );
+    test_scenario::return_shared(settings);
+    c.destroy_for_testing();
+    scenario.end();
+}
+
+#[test]
+#[expected_failure(abort_code = pod::E_INVALID_PARAMS)]
 fun test_create_pod_vesting_duration_too_short() {
     let (mut scenario, c, mut settings) = init_t(
         @0x1,
