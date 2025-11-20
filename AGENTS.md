@@ -37,7 +37,7 @@ Files in the `private` directory should be ignored.
 
 ### Core Module: `beelievers_kickstarter::pod`
 
-The entire platform is implemented in a single Move module (`sources/pod.move`) with ~610 lines of production code plus ~300 lines of tests.
+The entire platform is implemented in a single Move modules (.move files): production code in `sources` directory and tests in the `tests` directory.
 
 **Key Structs:**
 
@@ -64,18 +64,17 @@ The entire platform is implemented in a single Move module (`sources/pod.move`) 
 1. **INACTIVE**: Before subscription starts
 2. **SUBSCRIPTION**: Active investment period (must be ≥ 7 days)
 3. **FAILED**: Min goal not reached, refunds issued
+5. **GRACE**: Min goal reached, grace period during which vesting doesn't happen, but investors can withdraw with a reduced grace fee.
 4. **VESTING**: Success case, funds and tokens vest linearly
 
 **Core Functions:**
 
 - **Pod Creation**: `create_pod()` - Founders supply tokens equal to `max_goal / token_price`
 - **Investment**: `invest()` - During subscription, investors contribute funds, receive token allocation
-- **Cancellation**: `cancel_subscription()` - Investors can cancel once (keeps 0.1%)
+- **Cancellation**: `cancel_subscription()` - Investors can cancel once (`cancel_subscription_keep` is kept).
 - **Token Claims**: `investor_claim_tokens()` - Investors claim vested tokens
 - **Fund Claims**: `founder_claim_founds()` - Founders claim vested funds
-- **Exit Mechanism**: `exit_investment()` - Investors can exit with graduated fees:
-  - Within `small_fee_duration` of vesting: 0.8% fee.
-  - After that: `immediate_unlock_pm` fee.
+- **Exit Mechanism**: `exit_investment()` - See "Exit Mechanism" section in @README.md.
 - **Failed Pod Handling**: `failed_pod_refund()` and `failed_pod_withdraw()`
 
 **Key Design Patterns:**
@@ -133,15 +132,9 @@ Tests use Sui's `test_scenario` framework with helpers:
 
 ## Key Implementation Details
 
-**Vesting Calculation:**
-```move
-vested_tokens = immediate_unlock + (time_elapsed / vesting_duration) * (allocation - immediate_unlock)
-```
+**Vesting Calculation:** See "Phase 4: Vesting and Token Distribution" section in @README.md.
 
-**Exit Fee Logic:**
-```move
-fee = if (exit_time <= vesting_start + 14_days) grace_fee_pm else exit_fee_pm
-```
+**Exit Fee Logic:** See "Exit Mechanism" section in @README.md.
 
 **Precision:** All percentage calculations use permille (1000) with u128 intermediate results to prevent overflow.
 

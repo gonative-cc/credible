@@ -87,8 +87,8 @@ graph TD
 | `max_immediate_unlock`      | 10%      | Maximum % of funds team receives immediately after successful raise. It's also used to calculate the exit fee. |
 | `min_vesting_duration`      | 3 months | Minimum vesting duration for a Pod                                                                             |
 | `min_subscription_duration` | 7 days   | Minimum subscription period duration                                                                           |
-| `grace_fee`            | 0.8%     | Reduced exit fee during grace period                                                                           |
-| `small_fee_duration`        | 3 days   | Grace period with reduced exit fees                                                                            |
+| `grace_fee`                 | 0.8%     | Reduced exit fee during grace period                                                                           |
+| `grace_duration`            | 3 days   | Grace period with reduced exit fees                                                                            |
 | `cancel_subscription_keep`  | 0.1%     | Amount kept when investor cancels subscription                                                                 |
 | `setup_fee`                 | 5 SUI    | Setup fee charged to pod creators                                                                              |
 | `treasury`                  | -        | Address where setup fees are sent                                                                              |
@@ -125,18 +125,21 @@ Once a pod is created, anyone can subscribe for investment during the subscripti
 During the subscription phase investors can cancel their subscription by calling `cancel_subscription`. `investment × cancel_subscription_keep` will be kept as an investment. This will be fully refundable if the Pod didn't reach the `min_investment_goal`. Otherwise, this will be kept as a reduced investment.
 NOTE: investor can cancel the subscription only once. If an investor cancels his subscription, and then invest more, then he can't cancel it again.
 
-### Phase 2.5: Grace Period
+### Phase 3: Grace Period
 
-Starts immediately after the subscription period ends and the minimum investment goal is reached. The grace period lasts for `small_fee_duration` (global setting).
+Starts immediately after the subscription period ends and the minimum investment goal is reached. The grace period lasts for `grace_duration` (global setting).
 
 During the grace period:
+
 - Tokens are not yet vesting; investors cannot claim tokens.
 - Founders cannot claim funds.
 - Investors can exit their investment with the reduced `grace_fee` and will be available to the Founders.
 
-### Phase 3: Vesting and Token Distribution
+### Phase 4: Vesting and Token Distribution
 
 Starts when the minimum investment goal is reached and the subscription period ended. Let `F` be the total amount of funds raised.
+
+Right after the grace period:
 
 - Investors can claim `immediate_unlock` of their token allocation.
 - Founders can claim `immediate_unlock × F`.
@@ -179,7 +182,7 @@ Remaining unvested tokens and collected is returned to the founders.
 3. If investors lack confidence, they can exit during the subscription period, protecting initial investors and ensuring teams have planned properly.
 4. Market Validation: Failed subscriptions signal lack of market fit
 5. Growth Potential: Successful pods can create follow-on funding rounds
-6. Balance & checks mechanism based on `immediate_unlock`: Founders can set higher immediate unlock, that will impose higher fee on the investors when exiting. This will cause higher scrutiny and due diligence when subscribing to the project. Smaller `immediate_unlock` will make it less risky for investors (smaller fee for exit). `max_immediate_unlock` to protect the platform from greedy investors setting too high immediate unlock.
+6. Balance & checks mechanism based on `immediate_unlock`: Founders can set higher immediate unlock, that will impose higher fee on the investors when exiting. This will cause higher scrutiny and due diligence when subscribing to the project. Setting a smaller `immediate_unlock` will make it less risky for investors (smaller fee for exit). `max_immediate_unlock` protects investors greedy founders setting too high immediate unlock.
 
 Risk Mitigation
 

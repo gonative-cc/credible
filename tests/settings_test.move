@@ -33,7 +33,7 @@ fun test_platform_initialization() {
         min_vesting_duration,
         min_subscription_duration,
         grace_fee_pm,
-        small_fee_duration,
+        grace_duration,
         cancel_subscription_keep,
         setup_fee,
         treasury,
@@ -43,7 +43,7 @@ fun test_platform_initialization() {
     assert_u64_eq(min_vesting_duration, DAY * 30 * 3); // 3 months
     assert_u64_eq(min_subscription_duration, DAY * 7); // 7 days
     assert_u64_eq(grace_fee_pm, 8); // 0.8%
-    assert_u64_eq(small_fee_duration, DAY * 3); // 3 days
+    assert_u64_eq(grace_duration, DAY * 3); // 3 days
     assert_u64_eq(cancel_subscription_keep, 1); // 0.1%
     assert_u64_eq(setup_fee, 5_000_000_000); // 5 SUI
     assert!(treasury == @0x1); // owner
@@ -94,7 +94,7 @@ fun test_update_all_settings() {
         min_vesting_duration,
         min_subscription_duration,
         grace_fee_pm,
-        small_fee_duration,
+        grace_duration,
         cancel_subscription_keep,
         setup_fee,
         treasury,
@@ -104,7 +104,7 @@ fun test_update_all_settings() {
     assert_u64_eq(min_vesting_duration, DAY * 60);
     assert_u64_eq(min_subscription_duration, DAY * 14);
     assert_u64_eq(grace_fee_pm, 10);
-    assert_u64_eq(small_fee_duration, DAY * 30);
+    assert_u64_eq(grace_duration, DAY * 30);
     assert_u64_eq(cancel_subscription_keep, 2);
     assert_u64_eq(setup_fee, 6_000_000_000);
     assert!(treasury == @0x2);

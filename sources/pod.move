@@ -48,7 +48,7 @@ fun init(ctx: &mut TxContext) {
         min_vesting_duration: day * 30 * 3, // 3 months
         min_subscription_duration: day * 7,
         grace_fee_pm: 8, // 0.8%
-        small_fee_duration: 1000 * 60 * 60 * 24 * 3, // 3 days
+        grace_duration: 1000 * 60 * 60 * 24 * 3, // 3 days
         cancel_subscription_keep: 1, // 0.1%
         setup_fee: 5_000_000_000, // 5 SUI
         treasury: tx_context::sender(ctx),
@@ -106,7 +106,7 @@ public struct PodParams has copy, drop, store {
     vesting_duration: u64,
     immediate_unlock_pm: u64,
     grace_fee_pm: u64,
-    small_fee_duration: u64,
+    grace_duration: u64,
 }
 
 /// Shared object containing all platform parameters.
@@ -116,7 +116,7 @@ public struct GlobalSettings has key {
     min_vesting_duration: u64,
     min_subscription_duration: u64,
     grace_fee_pm: u64,
-    small_fee_duration: u64,
+    grace_duration: u64,
     cancel_subscription_keep: u64,
     setup_fee: u64,
     treasury: address,
@@ -130,7 +130,7 @@ public fun get_global_settings(
         settings.min_vesting_duration,
         settings.min_subscription_duration,
         settings.grace_fee_pm,
-        settings.small_fee_duration,
+        settings.grace_duration,
         settings.cancel_subscription_keep,
         settings.setup_fee,
         settings.treasury,
@@ -147,7 +147,7 @@ public fun update_settings(
     min_vesting_duration: Option<u64>,
     min_subscription_duration: Option<u64>,
     grace_fee_pm: Option<u64>,
-    small_fee_duration: Option<u64>,
+    grace_duration: Option<u64>,
     cancel_subscription_keep: Option<u64>,
     setup_fee: Option<u64>,
     treasury: Option<address>,
@@ -168,8 +168,8 @@ public fun update_settings(
     if (option::is_some(&grace_fee_pm)) {
         settings.grace_fee_pm = option::destroy_some(grace_fee_pm);
     };
-    if (option::is_some(&small_fee_duration)) {
-        settings.small_fee_duration = option::destroy_some(small_fee_duration);
+    if (option::is_some(&grace_duration)) {
+        settings.grace_duration = option::destroy_some(grace_duration);
     };
     if (option::is_some(&cancel_subscription_keep)) {
         settings.cancel_subscription_keep = option::destroy_some(cancel_subscription_keep);
@@ -268,7 +268,7 @@ public fun create_pod<C, T>(
         vesting_duration,
         immediate_unlock_pm,
         grace_fee_pm: settings.grace_fee_pm,
-        small_fee_duration: settings.small_fee_duration,
+        grace_duration: settings.grace_duration,
     };
 
     let pod = Pod<C, T> {
@@ -318,7 +318,7 @@ public fun get_pod_immediate_unlock_pm(p: &PodParams): u64 { p.immediate_unlock_
 
 public fun get_pod_grace_fee_pm(p: &PodParams): u64 { p.grace_fee_pm }
 
-public fun get_pod_small_fee_duration(p: &PodParams): u64 { p.small_fee_duration }
+public fun get_pod_grace_duration(p: &PodParams): u64 { p.grace_duration }
 
 public fun pod_token_vault_value<C, T>(pod: &Pod<C, T>): u64 {
     pod.token_vault.value()
@@ -334,7 +334,7 @@ public fun pod_status<C, T>(pod: &Pod<C, T>, clock: &Clock): u8 {
         if (pod.total_raised < pod.params.min_goal) {
             STATUS_FAILED
         } else {
-            let grace_end = pod.params.subscription_end + pod.params.small_fee_duration;
+            let grace_end = pod.params.subscription_end + pod.params.grace_duration;
             if (now < grace_end) STATUS_GRACE else STATUS_VESTING
         }
     } else {

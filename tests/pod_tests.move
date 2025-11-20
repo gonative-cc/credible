@@ -753,7 +753,7 @@ fun test_grace_period_can_exit() {
 // ================================
 
 #[test]
-fun test_exit_during_small_fee_period() {
+fun test_exit_during_grace_period() {
     let founder = @0x1;
     let investor = @0x2;
 
@@ -768,10 +768,10 @@ fun test_exit_during_small_fee_period() {
     transfer::public_transfer(excess, @0x0);
     test_scenario::return_shared(pod);
 
-    // Fast forward to grace period (small fee period)
+    // Fast forward to grace period (grace period)
+    // TODO: fix: must be within grace period
     clock.increment_for_testing(DAY * 7);
 
-    // Investor exits during small fee period
     scenario.next_tx(investor);
     let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     let (refund, vested_tokens) = pod.exit_investment(
@@ -779,7 +779,7 @@ fun test_exit_during_small_fee_period() {
         scenario.ctx(),
     );
 
-    // Should get refund with small fee applied
+    // Should get refund with grace fee applied
     assert!(refund.value() > 0);
     transfer::public_transfer(refund, @0x0);
     transfer::public_transfer(vested_tokens, @0x0);
@@ -789,13 +789,14 @@ fun test_exit_during_small_fee_period() {
 }
 
 #[test]
-fun test_exit_after_small_fee_period() {
+fun test_exit_after_grace_period() {
     let founder = @0x1;
     let investor = @0x2;
 
     let (mut scenario, mut clock, settings) = init1(founder);
 
     // Fast forward and invest
+    // TODO: to make sure calculation is good, we should define SUBSCRIPTION_START delta
     clock.increment_for_testing(MINUTE * 2);
     scenario.next_tx(investor);
     let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
@@ -804,10 +805,11 @@ fun test_exit_after_small_fee_period() {
     transfer::public_transfer(excess, @0x0);
     test_scenario::return_shared(pod);
 
-    // Fast forward past small fee period (3 days after vesting)
+    // Fast forward past the grace period
+    // TODO: use GRACE_DURATION
     clock.increment_for_testing(DAY * 7 + DAY * 15);
 
-    // Investor exits after small fee period
+    // Investor exits after grace fee period
     scenario.next_tx(investor);
     let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     let (refund, vested_tokens) = pod.exit_investment(
