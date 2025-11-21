@@ -46,6 +46,7 @@ fun init(ctx: &mut TxContext) {
         id: object::new(ctx),
         max_immediate_unlock_pm: 100, // 10.0%
         min_vesting_duration: day * 30 * 3, // 3 months
+        max_vesting_duration: day * 30 * 24, // 24 months
         min_subscription_duration: day * 7,
         max_subscription_duration: day * 30, // 30 days
         grace_fee_pm: 8, // 0.8%
@@ -115,6 +116,7 @@ public struct GlobalSettings has key {
     id: UID,
     max_immediate_unlock_pm: u64,
     min_vesting_duration: u64,
+    max_vesting_duration: u64,
     min_subscription_duration: u64,
     max_subscription_duration: u64,
     grace_fee_pm: u64,
@@ -126,10 +128,11 @@ public struct GlobalSettings has key {
 
 public fun get_global_settings(
     settings: &GlobalSettings,
-): (u64, u64, u64, u64, u64, u64, u64, u64, address) {
+): (u64, u64, u64, u64, u64, u64, u64, u64, u64, address) {
     (
         settings.max_immediate_unlock_pm,
         settings.min_vesting_duration,
+        settings.max_vesting_duration,
         settings.min_subscription_duration,
         settings.max_subscription_duration,
         settings.grace_fee_pm,
@@ -148,6 +151,7 @@ public fun update_settings(
     settings: &mut GlobalSettings,
     max_immediate_unlock_pm: Option<u64>,
     min_vesting_duration: Option<u64>,
+    max_vesting_duration: Option<u64>,
     min_subscription_duration: Option<u64>,
     max_subscription_duration: Option<u64>,
     grace_fee_pm: Option<u64>,
@@ -164,6 +168,11 @@ public fun update_settings(
         let v = option::destroy_some(min_vesting_duration);
         assert!(v > 0, E_INVALID_PARAMS);
         settings.min_vesting_duration = v;
+    };
+    if (option::is_some(&max_vesting_duration)) {
+        let v = option::destroy_some(max_vesting_duration);
+        assert!(v > 0, E_INVALID_PARAMS);
+        settings.max_vesting_duration = v;
     };
     if (option::is_some(&min_subscription_duration)) {
         settings.min_subscription_duration = option::destroy_some(min_subscription_duration);
@@ -250,6 +259,7 @@ public fun create_pod<C, T>(
             subscription_duration >= settings.min_subscription_duration &&
             subscription_duration <= settings.max_subscription_duration &&
             vesting_duration >= settings.min_vesting_duration &&
+            vesting_duration <= settings.max_vesting_duration &&
             immediate_unlock_pm <= settings.max_immediate_unlock_pm &&
         subscription_start > clock.timestamp_ms() &&
         token_price > 0 &&

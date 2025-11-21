@@ -31,6 +31,7 @@ fun test_platform_initialization() {
     let (
         max_immediate_unlock_pm,
         min_vesting_duration,
+        max_vesting_duration,
         min_subscription_duration,
         max_subscription_duration,
         grace_fee_pm,
@@ -42,6 +43,7 @@ fun test_platform_initialization() {
 
     assert_u64_eq(max_immediate_unlock_pm, 100); // 10.0%
     assert_u64_eq(min_vesting_duration, DAY * 30 * 3); // 3 months
+    assert_u64_eq(max_vesting_duration, DAY * 30 * 24); // 24 months
     assert_u64_eq(min_subscription_duration, DAY * 7); // 7 days
     assert_u64_eq(max_subscription_duration, DAY * 30); // 30 days
     assert_u64_eq(grace_fee_pm, 8); // 0.8%
@@ -80,12 +82,13 @@ fun test_update_all_settings() {
         &cap,
         &mut settings,
         option::some(100), // 10%
-        option::some(DAY * 60), // 2 months
-        option::some(DAY * 14), // 14 days
-        option::some(DAY * 60), // 60 days max subscription
-        option::some(10), // 1%
-        option::some(DAY * 30), // 30 days
-        option::some(2), // 0.2%
+        option::some(DAY * 60), // 2 months min
+        option::some(DAY * 365 * 2), // 2 years max
+        option::some(DAY * 14), // 14 days min sub
+        option::some(DAY * 60), // 60 days max sub
+        option::some(10), // 1% grace
+        option::some(DAY * 30), // 30 days grace
+        option::some(2), // 0.2% keep
         option::some(6_000_000_000), // 6 SUI
         option::some(@0x2), // new treasury
         ctx(&mut scenario),
@@ -95,6 +98,7 @@ fun test_update_all_settings() {
     let (
         max_immediate_unlock_pm,
         min_vesting_duration,
+        max_vesting_duration,
         min_subscription_duration,
         max_subscription_duration,
         grace_fee_pm,
@@ -106,6 +110,7 @@ fun test_update_all_settings() {
 
     assert_u64_eq(max_immediate_unlock_pm, 100);
     assert_u64_eq(min_vesting_duration, DAY * 60);
+    assert_u64_eq(max_vesting_duration, DAY * 365 * 2);
     assert_u64_eq(min_subscription_duration, DAY * 14);
     assert_u64_eq(max_subscription_duration, DAY * 60);
     assert_u64_eq(grace_fee_pm, 10);
@@ -144,11 +149,12 @@ fun test_update_individual_settings() {
         option::none(),
         option::none(),
         option::none(),
+        option::none(),
         ctx(&mut scenario),
     );
 
     // Verify only max_immediate_unlock changed
-    let (max_immediate_unlock_pm, _, _, _, _, _, _, _, _) = pod::get_global_settings(
+    let (max_immediate_unlock_pm, _, _, _, _, _, _, _, _, _) = pod::get_global_settings(
         &settings,
     );
 
@@ -178,6 +184,7 @@ fun test_update_settings_zero_vesting_duration() {
         &mut settings,
         option::none(),
         option::some(0),
+        option::none(),
         option::none(),
         option::none(),
         option::none(),
