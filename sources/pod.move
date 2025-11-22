@@ -650,12 +650,11 @@ public fun calculate_vested_tokens(
     let immediate_unlock = ratio_ext_pm(allocation, immediate_unlock_pm);
     if (time_elapsed == 0) return immediate_unlock;
 
-    let vested_tokens = if (time_elapsed >= vesting_duration) {
-        allocation - immediate_unlock
-    } else {
-        ratio_ext(time_elapsed, (allocation - immediate_unlock), vesting_duration)
+    if (time_elapsed >= vesting_duration) {
+        return allocation
     };
-    immediate_unlock + vested_tokens
+    let vested_tokens = ratio_ext(time_elapsed, (allocation - immediate_unlock), vesting_duration);
+    return immediate_unlock + vested_tokens
 }
 
 //
