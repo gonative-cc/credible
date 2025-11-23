@@ -784,7 +784,7 @@ fun helper_test_exit(is_grace: bool): (Scenario, Clock, GlobalSettings) {
     clock.increment_for_testing(SUBS_START_DELTA);
     scenario.next_tx(investor);
     let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
-    let investment = mint_for_testing(1_000_000, scenario.ctx());
+    let investment = mint_for_testing(MAX_GOAL, scenario.ctx());
     let excess = pod.invest(investment, &clock, scenario.ctx());
     transfer::public_transfer(excess, @0x0);
     test_scenario::return_shared(pod);
@@ -816,6 +816,7 @@ fun test_exit_grace_period() {
     let expected_refund = 1_000_000 - ratio_ext_pm(1_000_000, fee);
     assert_u64_eq(refund.value(), expected_refund);
     assert_u64_eq(vested_tokens.value(), ratio_ext_pm(REQUIRED_TOKENS, fee));
+    assert!(pod.pod_status(&clock) == pod::status_grace());
     transfer::public_transfer(refund, @0x0);
     transfer::public_transfer(vested_tokens, @0x0);
 
@@ -837,6 +838,7 @@ fun test_exit_after_grace_period() {
 
     // Should get refund with standard 10% fee
     assert!(refund.value() > 0);
+    assert!(pod.pod_status(&clock) == pod::status_vesting());
     transfer::public_transfer(refund, @0x0);
     transfer::public_transfer(vested_tokens, @0x0);
 

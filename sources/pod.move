@@ -90,8 +90,10 @@ public struct Pod<phantom C, phantom T> has key {
     funds_vault: Balance<C>,
     total_allocated: u64,
     total_raised: u64,
+    num_investors: u64,
     investments: Table<address, InvestorRecord>,
     founder_claimed_funds: u64,
+    reached_min_goal: bool,
     params: PodParams,
 }
 
@@ -299,7 +301,9 @@ public fun create_pod<C, T>(
         investments: table::new(ctx),
         total_allocated: 0,
         total_raised: 0,
+        num_investors: 0,
         founder_claimed_funds: 0,
+        reached_min_goal: false,
         params,
     };
 
@@ -317,6 +321,8 @@ public fun create_pod<C, T>(
 public fun get_pod_params<C, T>(pod: &Pod<C, T>): PodParams { pod.params }
 
 public fun get_pod_total_raised<C, T>(p: &Pod<C, T>): u64 { p.total_raised }
+
+public fun get_pod_num_investors<C, T>(p: &Pod<C, T>): u64 { p.num_investors }
 
 public fun get_pod_token_price(p: &PodParams): u64 { p.token_price }
 
@@ -346,17 +352,14 @@ public fun pod_total_allocated<C, T>(pod: &Pod<C, T>): u64 { pod.total_allocated
 
 public fun pod_status<C, T>(pod: &Pod<C, T>, clock: &Clock): u8 {
     let now = clock.timestamp_ms();
-    if (now < pod.params.subscription_start) {
-        STATUS_INACTIVE
-    } else if (now >= pod.params.subscription_end) {
-        if (pod.total_raised < pod.params.min_goal) {
-            STATUS_FAILED
-        } else {
-            let grace_end = pod.params.subscription_end + pod.params.grace_duration;
-            if (now < grace_end) STATUS_GRACE else STATUS_VESTING
-        }
+    if (now < pod.params.subscription_start) return STATUS_INACTIVE;
+    if (now < pod.params.subscription_end) return STATUS_SUBSCRIPTION;
+
+    if (pod.reached_min_goal) {
+        let grace_end = pod.params.subscription_end + pod.params.grace_duration;
+        if (now < grace_end) STATUS_GRACE else STATUS_VESTING
     } else {
-        STATUS_SUBSCRIPTION
+        STATUS_FAILED
     }
 }
 
@@ -400,6 +403,9 @@ public fun invest<C, T>(
         pod.params.token_price,
     );
     pod.total_raised = pod.total_raised + actual_investment;
+    if (pod.total_raised >= pod.params.min_goal && !pod.reached_min_goal) {
+        pod.reached_min_goal = true;
+    };
     pod.total_allocated = pod.total_allocated + additional_tokens;
     pod.funds_vault.join(investment.into_balance());
 
@@ -416,13 +422,14 @@ public fun invest<C, T>(
             cancelled: false,
         };
         pod.investments.add(investor, allocation);
+        pod.num_investors = pod.num_investors + 1;
         actual_investment
     };
 
     emit(EventInvestmentMade { pod_id: object::id(pod), investor, total_investment });
 
     if (pod.total_raised >= pod.params.max_goal) {
-        // This triggers vesting start
+        // This triggers grace/vesting
         pod.params.subscription_end = clock::timestamp_ms(clock);
         emit(EventPodMaxGoal { pod_id: object::id(pod) });
     };
@@ -502,8 +509,9 @@ public fun exit_investment<C, T>(
     let status = pod.pod_status(clock);
     assert!(status == STATUS_GRACE || status == STATUS_VESTING, E_POD_NOT_VESTING);
     let investor = ctx.sender();
-    // we delete the investment record t oassure user won't be able to exit 2 times.
+    // we delete the investment record to assure user won't be able to exit 2 times.
     let ir = pod.investments.remove(investor);
+    pod.num_investors = pod.num_investors - 1;
     assert!(ir.claimed_tokens < ir.allocation, E_ALREADY_EXITED);
 
     let (vested_tokens, funds_unlocked) = if (status == STATUS_GRACE) {
@@ -537,6 +545,7 @@ public fun exit_investment<C, T>(
     assert!(remaining_investment > fee_amount, E_NOTHING_TO_EXIT);
 
     let refund_amount = remaining_investment - fee_amount;
+    pod.total_raised = pod.total_raised - refund_amount;
     let refund_coin = coin::take(&mut pod.funds_vault, refund_amount, ctx);
 
     let to_claim = vested_tokens - ir.claimed_tokens;
