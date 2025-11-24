@@ -105,9 +105,10 @@ graph TD
 
 #### Example
 
-Alice invested 100 USDC in a token X Pod with 10% immediate unlock, 100 days vesting period and no cliff. That gives her 1000 X tokens allocation.
+Alice invested 100 USDC in a token X Pod with 10% immediate unlock, 100 days vesting period and 30 days cliff with cliff_token_immediate_unlock = true. That gives her 1000 X tokens allocation.
 
-- After grace period, Alice can immediately can claim 100 X tokens and vesting begins.
+- After grace period, the cliff period starts. Since cliff_token_immediate_unlock is true, Alice can claim 100 X tokens immediately.
+- After cliff ends, vesting begins.
 - 50 days (50% of the total vesting period) after the start of the vesting Alice decides to exit.
 - She will get 50% of 9000 token allocation (total allocation - immediate claim) = 4500 X tokens.
 - 50% of her USDC is already vested for the founders, so there is 50 USDC left. Exit fee = 10% (equal to `immediate_unlock_pm`) is charged from that remaining 50 USDC and sent to the Pod founders. So she will get back 45 USDC. Remaining X token allocation (4500 X tokens) are sent to the
@@ -133,6 +134,8 @@ At the end: she got 45 USDC back and received 5500 X tokens.
 | `cancel_subscription_keep`  | 0.1%      | Amount kept when investor cancels subscription                                                                 |
 | `setup_fee`                 | 5 SUI     | Setup fee charged to pod creators                                                                              |
 | `treasury`                  | -         | Address where setup fees are sent                                                                              |
+| `min_cliff_duration`        | 0         | Minimum cliff duration for a Pod                                                                               |
+| `max_cliff_duration`        | 2 years   | Maximum cliff duration for a Pod                                                                               |
 
 ### Phase 1: Pod Creation
 
@@ -142,6 +145,8 @@ Founders create a `Pod` and:
    - Subscription phase: start and end date (duration must be ≥ `min_subscription_duration`).
    - Token vesting duration (e.g., 12 months).
    - `immediate_unlock`: Percentage of funds the team wants to unlock immediately (must be ≤ `max_immediate_unlock`).
+   - Cliff duration (e.g., 6 months, must be ≥ `min_cliff_duration` and ≤ `max_cliff_duration`).
+   - `cliff_token_immediate_unlock`: Whether investors can claim immediate unlock during cliff (must be false if cliff_duration = 0).
    - Accepted currency (e.g., USDC).
    - Token price (e.g., 0.1 USDC/token).
    - `min_investment_goal` and `max_investment_goal` (e.g., min=100k USDC, max=200k USDC).
@@ -175,6 +180,16 @@ During the grace period:
 - Tokens are not yet vesting; investors cannot claim tokens.
 - Founders cannot claim funds.
 - Investors can exit their investment with the reduced `grace_fee` and will be available to the Founders.
+
+### Phase 3.5: Cliff Period
+
+Starts immediately after the grace period ends, if `cliff_duration` > 0. The cliff period lasts for `cliff_duration`.
+
+During the cliff period:
+
+- Tokens are not yet vesting; investors cannot claim tokens unless `cliff_token_immediate_unlock` is true, in which case they can claim `immediate_unlock` of their tokens.
+- Founders can claim `immediate_unlock` of their funds.
+- Investors can exit their investment with the `immediate_unlock_pm` fee.
 
 ### Phase 4: Vesting and Token Distribution
 

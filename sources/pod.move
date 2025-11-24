@@ -19,7 +19,8 @@ const STATUS_INACTIVE: u8 = 0;
 const STATUS_SUBSCRIPTION: u8 = 1;
 const STATUS_FAILED: u8 = 2;
 const STATUS_GRACE: u8 = 3;
-const STATUS_VESTING: u8 = 4;
+const STATUS_CLIFF: u8 = 4;
+const STATUS_VESTING: u8 = 5;
 
 // --- Error Codes ---
 const E_INVALID_PARAMS: u64 = 0;
@@ -54,6 +55,8 @@ fun init(ctx: &mut TxContext) {
         cancel_subscription_keep: 1, // 0.1%
         setup_fee: 5_000_000_000, // 5 SUI
         treasury: tx_context::sender(ctx),
+        min_cliff_duration: 0, // Cliff duration can be 0 (disabled)
+        max_cliff_duration: day * 365 * 2, // 2 years max cliff
     };
     transfer::share_object(settings);
 
@@ -111,6 +114,8 @@ public struct PodParams has copy, drop, store {
     immediate_unlock_pm: u64,
     grace_fee_pm: u64,
     grace_duration: u64,
+    cliff_duration: u64,
+    cliff_token_immediate_unlock: bool,
 }
 
 /// Shared object containing all platform parameters.
@@ -126,11 +131,13 @@ public struct GlobalSettings has key {
     cancel_subscription_keep: u64,
     setup_fee: u64,
     treasury: address,
+    min_cliff_duration: u64,
+    max_cliff_duration: u64,
 }
 
 public fun get_global_settings(
     settings: &GlobalSettings,
-): (u64, u64, u64, u64, u64, u64, u64, u64, u64, address) {
+): (u64, u64, u64, u64, u64, u64, u64, u64, u64, address, u64, u64) {
     (
         settings.max_immediate_unlock_pm,
         settings.min_vesting_duration,
@@ -142,6 +149,8 @@ public fun get_global_settings(
         settings.cancel_subscription_keep,
         settings.setup_fee,
         settings.treasury,
+        settings.min_cliff_duration,
+        settings.max_cliff_duration,
     )
 }
 
@@ -161,6 +170,8 @@ public fun update_settings(
     cancel_subscription_keep: Option<u64>,
     setup_fee: Option<u64>,
     treasury: Option<address>,
+    min_cliff_duration: Option<u64>,
+    max_cliff_duration: Option<u64>,
     _ctx: &mut TxContext,
 ) {
     if (option::is_some(&max_immediate_unlock_pm)) {
@@ -197,6 +208,12 @@ public fun update_settings(
     };
     if (option::is_some(&treasury)) {
         settings.treasury = option::destroy_some(treasury);
+    };
+    if (option::is_some(&min_cliff_duration)) {
+        settings.min_cliff_duration = option::destroy_some(min_cliff_duration);
+    };
+    if (option::is_some(&max_cliff_duration)) {
+        settings.max_cliff_duration = option::destroy_some(max_cliff_duration);
     };
     emit(EventSettingsUpdated {});
 }
@@ -250,6 +267,8 @@ public fun create_pod<C, T>(
     subscription_duration: u64,
     vesting_duration: u64,
     immediate_unlock_pm: u64,
+    cliff_duration: u64,
+    cliff_token_immediate_unlock: bool,
     tokens: Coin<T>,
     setup_fee: Coin<SUI>,
     clock: &Clock,
@@ -263,11 +282,18 @@ public fun create_pod<C, T>(
             vesting_duration >= settings.min_vesting_duration &&
             vesting_duration <= settings.max_vesting_duration &&
             immediate_unlock_pm <= settings.max_immediate_unlock_pm &&
-        subscription_start > clock.timestamp_ms() &&
-        token_price > 0 &&
-        price_multiplier > 0,
+            cliff_duration >= settings.min_cliff_duration &&
+            cliff_duration <= settings.max_cliff_duration &&
+            subscription_start > clock.timestamp_ms() &&
+            token_price > 0 &&
+            price_multiplier > 0,
     );
     assert!(params_valid, E_INVALID_PARAMS);
+
+    // cliff_token_immediate_unlock must be false if cliff_duration is 0
+    if (cliff_duration == 0) {
+        assert!(!cliff_token_immediate_unlock, E_INVALID_PARAMS);
+    };
 
     let subscription_end = subscription_start + subscription_duration;
     let required_tokens = (max_goal * price_multiplier) / token_price;
@@ -289,6 +315,8 @@ public fun create_pod<C, T>(
         immediate_unlock_pm,
         grace_fee_pm: settings.grace_fee_pm,
         grace_duration: settings.grace_duration,
+        cliff_duration,
+        cliff_token_immediate_unlock,
     };
 
     let pod = Pod<C, T> {
@@ -344,6 +372,12 @@ public fun get_pod_grace_fee_pm(p: &PodParams): u64 { p.grace_fee_pm }
 
 public fun get_pod_grace_duration(p: &PodParams): u64 { p.grace_duration }
 
+public fun get_pod_cliff_duration(p: &PodParams): u64 { p.cliff_duration }
+
+public fun get_pod_cliff_token_immediate_unlock(p: &PodParams): bool {
+    p.cliff_token_immediate_unlock
+}
+
 public fun pod_token_vault_value<C, T>(pod: &Pod<C, T>): u64 {
     pod.token_vault.value()
 }
@@ -354,13 +388,15 @@ public fun pod_status<C, T>(pod: &Pod<C, T>, clock: &Clock): u8 {
     let now = clock.timestamp_ms();
     if (now < pod.params.subscription_start) return STATUS_INACTIVE;
     if (now < pod.params.subscription_end) return STATUS_SUBSCRIPTION;
+    if (!pod.reached_min_goal) return STATUS_FAILED;
 
-    if (pod.reached_min_goal) {
-        let grace_end = pod.params.subscription_end + pod.params.grace_duration;
-        if (now < grace_end) STATUS_GRACE else STATUS_VESTING
-    } else {
-        STATUS_FAILED
-    }
+    let grace_end = pod.params.subscription_end + pod.params.grace_duration;
+    if (now < grace_end) return STATUS_GRACE;
+    if (pod.params.cliff_duration > 0) {
+        let cliff_end = grace_end + pod.params.cliff_duration;
+        if (now < cliff_end) return STATUS_CLIFF;
+    };
+    STATUS_VESTING
 }
 
 /// returns Some(InvestorRecord) for the investor if he invest in the pod.
@@ -480,10 +516,11 @@ public fun investor_claim_tokens<C, T>(
     clock: &Clock,
     ctx: &mut TxContext,
 ): Coin<T> {
-    assert!(pod_status(pod, clock) == STATUS_VESTING, E_POD_NOT_VESTING);
+    let status = pod_status(pod, clock);
+    assert!(status == STATUS_VESTING || status == STATUS_CLIFF, E_POD_NOT_VESTING);
     let investor = ctx.sender();
-    let time_elapsed = pod.elapsed_vesting_time(clock);
     let pod_id = object::id(pod);
+    let time_elapsed = pod.elapsed_vesting_time(clock);
     let ir = &mut pod.investments[investor];
     let vested_tokens = calculate_vested_tokens(
         time_elapsed,
@@ -507,7 +544,10 @@ public fun exit_investment<C, T>(
     ctx: &mut TxContext,
 ): (Coin<C>, Coin<T>) {
     let status = pod.pod_status(clock);
-    assert!(status == STATUS_GRACE || status == STATUS_VESTING, E_POD_NOT_VESTING);
+    assert!(
+        status == STATUS_GRACE || status == STATUS_CLIFF || status == STATUS_VESTING,
+        E_POD_NOT_VESTING,
+    );
     let investor = ctx.sender();
     // we delete the investment record to assure user won't be able to exit 2 times.
     let ir = pod.investments.remove(investor);
@@ -517,7 +557,13 @@ public fun exit_investment<C, T>(
     let (vested_tokens, funds_unlocked) = if (status == STATUS_GRACE) {
         let vested_tokens = ratio_ext_pm(ir.allocation, pod.params.grace_fee_pm);
         (vested_tokens, 0)
+    } else if (status == STATUS_CLIFF) {
+        // During cliff, no additional tokens have vested beyond immediate unlock
+        // Investors get their immediate unlock tokens, but no additional vesting happens
+        let vested_tokens = ratio_ext_pm(ir.allocation, pod.params.immediate_unlock_pm);
+        (vested_tokens, 0)
     } else {
+        // STATUS_VESTING
         let time_elapsed = pod.elapsed_vesting_time(clock);
         let vested_tokens = calculate_vested_tokens(
             time_elapsed,
@@ -596,7 +642,8 @@ public fun founder_claim_funds<C, T>(
     ctx: &mut TxContext,
 ): Coin<C> {
     assert!(cap.pod_id == object::id(pod), E_NOT_ADMIN);
-    assert!(pod_status(pod, clock) == STATUS_VESTING, E_POD_NOT_VESTING);
+    let status = pod.pod_status(clock);
+    assert!(status == STATUS_VESTING || status == STATUS_CLIFF, E_POD_NOT_VESTING);
 
     let total_claimable = calculate_founder_claimable(pod, clock);
     let to_claim = total_claimable - pod.founder_claimed_funds;
@@ -643,12 +690,21 @@ public fun founder_claim_unallocated_tokens<C, T>(
 // --- Public View Functions ---
 
 public fun calculate_founder_claimable<C, T>(pod: &Pod<C, T>, clock: &Clock): u64 {
-    calculate_vested_tokens(
-        pod.elapsed_vesting_time(clock),
-        pod.params.vesting_duration,
-        pod.params.immediate_unlock_pm,
-        pod.total_raised,
-    )
+    let status = pod.pod_status(clock);
+    if (status == STATUS_VESTING) {
+        let time_elapsed = pod.elapsed_vesting_time(clock);
+        calculate_vested_tokens(
+            time_elapsed,
+            pod.params.vesting_duration,
+            pod.params.immediate_unlock_pm,
+            pod.total_raised,
+        )
+    } else if (status == STATUS_CLIFF) {
+        // During cliff, only immediate_unlock is available
+        ratio_ext_pm(pod.total_raised, pod.params.immediate_unlock_pm)
+    } else {
+        0 // Not in cliff or vesting, so nothing claimable
+    }
 }
 
 // Note: we can't have it as a pod method because it cause problem with borrow constrains.
@@ -672,12 +728,20 @@ public fun calculate_vested_tokens(
 // --- Package Helper Functions ---
 //
 
-/// Returns time elapsed since vesting.
-/// Aborts if pod is not in vesting phase.
+/// Returns time elapsed since vesting when pod is in Vesting phase.
+/// Returns zero when pod is in Cliff phase with cliff_token_immediate_unlock == true.
+/// Aborts otherwise.
 public(package) fun elapsed_vesting_time<C, T>(pod: &Pod<C, T>, clock: &Clock): u64 {
-    assert!(pod_status(pod, clock) == STATUS_VESTING, E_POD_NOT_VESTING);
+    let status = pod_status(pod, clock);
+    assert!(status == STATUS_VESTING || status == STATUS_CLIFF, E_POD_NOT_VESTING);
+    if (status == STATUS_CLIFF) {
+        assert!(pod.params.cliff_token_immediate_unlock, E_POD_NOT_VESTING);
+        return 0
+    };
     let now = clock.timestamp_ms();
-    now - (pod.params.subscription_end + pod.params.grace_duration)
+    let vesting_start =
+        pod.params.subscription_end + pod.params.grace_duration + pod.params.cliff_duration;
+    now - vesting_start
 }
 
 /// calculates num * numerator / denominator using extended precision (u128)
@@ -707,5 +771,7 @@ public fun status_subscription(): u8 { STATUS_SUBSCRIPTION }
 public fun status_failed(): u8 { STATUS_FAILED }
 #[test_only]
 public fun status_grace(): u8 { STATUS_GRACE }
+#[test_only]
+public fun status_cliff(): u8 { STATUS_CLIFF }
 #[test_only]
 public fun status_vesting(): u8 { STATUS_VESTING }
