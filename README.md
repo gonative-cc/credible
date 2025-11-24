@@ -75,10 +75,9 @@ Grace and Cliff:
 
 ```mermaid
 graph TD
-     A[Grace period begins] --> B[Investor exits]
-     B --> |Yes| B2[small grace fee is charged]
-     B --> |No.<br>Wait for the end of the grace period| C[Cliff begins]
-     B2 --> B3[investor gets the refund]
+     A[Grace Period] --> |Investor exits| B[small grace fee is charged]
+     A --> |Wait| C[Grace Period end]
+     B --> B2[investor gets the refund]
 
      C --> D[Founders can claim  immediate_unlock]
 
@@ -87,7 +86,7 @@ graph TD
      E --> |No| IU
 
      F -->|Yes| IU[Invstors claim immediate_unlock]
-     F -->|No| WV[Wait for Vesting period start]
+     F -->|No| WV[Wait for the end of the Cliff Period end]
      WV --> V[Vesting begins]
      V --> IU
 ```
@@ -103,6 +102,17 @@ graph TD
      P --> Q[Process exit]
      O -->|No| N
 ```
+
+#### Example
+
+Alice invested 100 USDC in a token X Pod with 10% immediate unlock, 100 days vesting period and no cliff. That gives her 1000 X tokens allocation.
+
+- After grace period, Alice can immediately can claim 100 X tokens and vesting begins.
+- 50 days (50% of the total vesting period) after the start of the vesting Alice decides to exit.
+- She will get 50% of 9000 token allocation (total allocation - immediate claim) = 4500 X tokens.
+- 50% of her USDC is already vested for the founders, so there is 50 USDC left. Exit fee = 10% (equal to `immediate_unlock_pm`) is charged from that remaining 50 USDC and sent to the Pod founders. So she will get back 45 USDC. Remaining X token allocation (4500 X tokens) are sent to the
+
+At the end: she got 45 USDC back and received 5500 X tokens.
 
 ### Objects
 
