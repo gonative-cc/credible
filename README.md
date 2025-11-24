@@ -53,26 +53,55 @@ BTCFi ecosystem face a critical bottleneck:
 
 ### Flow
 
+Subscription and a setup:
+
 ```mermaid
 graph TD
-     A[Founders create Pod<br>supply tokens and pays the fee] --> C[Subscription phase begins]
-     C --> D{Min goal reached?}
-     D -->|No| E[Pod ends - refunds issued]
-     D -->|Yes| F{Max goal reached?}
-     F -->|No| G[Continue accepting investments]
-     F -->|Yes| H[Subscription ends early]
-     G --> I[Subscription period ends]
-     H --> J[Grace period begins]
-     I --> J
-     J --> K[Vesting begins]
-     K --> L[Immediate unlock distribution]
-     L --> M[Linear vesting period]
-     M --> N[Investors can claim vested tokens]
+     A[Founders create Pod<br>supply tokens and pays a fee] --> C[Subscription phase begins]
+     A --> B[Collect protocol fees]
+     C --> D1[Investors subscribing<br>investing money]
+     D1 --> D2{Subscription status}
+     D2 -->|time end<br>min goal not reached| E[Pod ends - refunds issued]
+     D2 -->|Max goal reached| H1[Subscription ends early]
+     D2 -->|time end<br>min goal reached| H2[Subscription period ends]
+     D2 -->|time not ended| D1
+     D1 --> |investor cancel subscription| F[return investment - cancel_subscription fee]
+     F --> B
+     H1 --> J[Grace period begins]
+     H2 --> J
+```
+
+Grace and Cliff:
+
+```mermaid
+graph TD
+     A[Grace period begins] --> B[Investor exits]
+     B --> |Yes| B2[small grace fee is charged]
+     B --> |No.<br>Wait for the end of the grace period| C[Cliff begins]
+     B2 --> B3[investor gets the refund]
+
+     C --> D[Founders can claim  immediate_unlock]
+
+     C --> E{Is cliff > 0}
+     E --> |Yes| F{investor immediate_unlock during cliff?}
+     E --> |No| IU
+
+     F -->|Yes| IU[Invstors claim immediate_unlock]
+     F -->|No| WV[Wait for Vesting period start]
+     WV --> V[Vesting begins]
+     V --> IU
+```
+
+Vesting:
+
+```mermaid
+graph TD
+     V[Linear vesting period<br>for both investors and founders]
+     V --> N[Investors can claim vested tokens]
      N --> O{Investor wants to exit?}
      O -->|Yes| P[Calculate exit fee]
      P --> Q[Process exit]
      O -->|No| N
-     K --> R[Investors Claim Tokens]
 ```
 
 ### Objects
@@ -82,18 +111,18 @@ graph TD
 
 ### System Parameters
 
-| Parameter                   | Default  | Description                                                                                                    |
-| --------------------------- | -------- | -------------------------------------------------------------------------------------------------------------- |
-| `max_immediate_unlock`      | 10%      | Maximum % of funds team receives immediately after successful raise. It's also used to calculate the exit fee. |
-| `min_vesting_duration`      | 3 months | Minimum vesting duration for a Pod                                                                             |
-| `max_vesting_duration`      | 24 months| Maximum vesting duration for a Pod                                                                             |
-| `min_subscription_duration` | 7 days   | Minimum subscription period duration                                                                           |
-| `max_subscription_duration` | 30 days  | Maximum subscription period duration                                                                           |
-| `grace_fee`                 | 0.8%     | Reduced exit fee during grace period                                                                           |
-| `grace_duration`            | 3 days   | Grace period with reduced exit fees                                                                            |
-| `cancel_subscription_keep`  | 0.1%     | Amount kept when investor cancels subscription                                                                 |
-| `setup_fee`                 | 5 SUI    | Setup fee charged to pod creators                                                                              |
-| `treasury`                  | -        | Address where setup fees are sent                                                                              |
+| Parameter                   | Default   | Description                                                                                                    |
+| --------------------------- | --------- | -------------------------------------------------------------------------------------------------------------- |
+| `max_immediate_unlock`      | 10%       | Maximum % of funds team receives immediately after successful raise. It's also used to calculate the exit fee. |
+| `min_vesting_duration`      | 3 months  | Minimum vesting duration for a Pod                                                                             |
+| `max_vesting_duration`      | 24 months | Maximum vesting duration for a Pod                                                                             |
+| `min_subscription_duration` | 7 days    | Minimum subscription period duration                                                                           |
+| `max_subscription_duration` | 30 days   | Maximum subscription period duration                                                                           |
+| `grace_fee`                 | 0.8%      | Reduced exit fee during grace period                                                                           |
+| `grace_duration`            | 3 days    | Grace period with reduced exit fees                                                                            |
+| `cancel_subscription_keep`  | 0.1%      | Amount kept when investor cancels subscription                                                                 |
+| `setup_fee`                 | 5 SUI     | Setup fee charged to pod creators                                                                              |
+| `treasury`                  | -         | Address where setup fees are sent                                                                              |
 
 ### Phase 1: Pod Creation
 
