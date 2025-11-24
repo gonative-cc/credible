@@ -1,5 +1,14 @@
 # Deployment info
 
+## Nov 23
+
+Deployment Tx: [6FW16CXbwRQaLtNZXp2F822QTuNJAmBHGCMvyxUctWH](https://testnet.suivision.xyz/txblock/6FW16CXbwRQaLtNZXp2F822QTuNJAmBHGCMvyxUctWH)
+package id 0x9a632e2cf4deaae3fc527ac99de6b556c4ce6d97f78d7413491047dbd14b19ff
+Objects:
+- PlatformAdminCap 0x214e93541c9f80c4e32e2a98c62cd917a452af809b77e3ee3909653784539338
+- GlobalSettings: 0xec2b6cfc7444faf8004bc30b950162390f182eb1c704162cbf676ac813d99f91
+
+
 ## Nov 19
 
 Deployment Tx: [4t9Rkd4t6u5FLuQhmuBmBfdSjQeMKwSTnjgtbLSccRPY](https://testnet.suivision.xyz/txblock/4t9Rkd4t6u5FLuQhmuBmBfdSjQeMKwSTnjgtbLSccRPY)
