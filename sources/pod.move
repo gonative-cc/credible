@@ -555,6 +555,8 @@ public fun exit_investment<C, T>(
         coin::zero(ctx)
     };
 
+    // reminder of the tokens allocated to the investors should decrease the total_allocation,
+    // so they can be claimed by the founders.
     let unvested_tokens = ir.allocation - vested_tokens;
     if (unvested_tokens > 0) {
         pod.total_allocated = pod.total_allocated - unvested_tokens;
@@ -622,7 +624,7 @@ public fun failed_pod_withdraw<C, T>(
 }
 
 /// Enable founders to withdraw unallocated tokens
-public fun withdraw_unallocated_tokens<C, T>(
+public fun founder_claim_unallocated_tokens<C, T>(
     pod: &mut Pod<C, T>,
     cap: &PodAdminCap,
     clock: &Clock,
