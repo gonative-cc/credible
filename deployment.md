@@ -1,19 +1,29 @@
 # Deployment info
 
+## Nov 25
+
+Deployment Tx: [519zAsKgXJJHf1855aQ7TqEGxh3mg7BRBArcNsz6seHS](https://testnet.suivision.xyz/txblock/519zAsKgXJJHf1855aQ7TqEGxh3mg7BRBArcNsz6seHS)
+package id: 0xe7702de6e2f751d87e6f4a520add0076a687997beb979038b84b4e1cb306eb02
+Objects:
+
+- PlatformAdminCap: 0x9fa4cc933b1a44f24cd1e7f7a8a8855b5327f03b50db4005e258b53a5ac3b74e
+- GlobalSettings: 0x6aae8f488b7a21e3dca357849a9fbfd157983f547514e34db32936d01b6b5c97
+
 ## Nov 23
 
 Deployment Tx: [6FW16CXbwRQaLtNZXp2F822QTuNJAmBHGCMvyxUctWH](https://testnet.suivision.xyz/txblock/6FW16CXbwRQaLtNZXp2F822QTuNJAmBHGCMvyxUctWH)
-package id 0x9a632e2cf4deaae3fc527ac99de6b556c4ce6d97f78d7413491047dbd14b19ff
+package id: 0x9a632e2cf4deaae3fc527ac99de6b556c4ce6d97f78d7413491047dbd14b19ff
 Objects:
-- PlatformAdminCap 0x214e93541c9f80c4e32e2a98c62cd917a452af809b77e3ee3909653784539338
-- GlobalSettings: 0xec2b6cfc7444faf8004bc30b950162390f182eb1c704162cbf676ac813d99f91
 
+- PlatformAdminCap: 0x214e93541c9f80c4e32e2a98c62cd917a452af809b77e3ee3909653784539338
+- GlobalSettings: 0xec2b6cfc7444faf8004bc30b950162390f182eb1c704162cbf676ac813d99f91
 
 ## Nov 19
 
 Deployment Tx: [4t9Rkd4t6u5FLuQhmuBmBfdSjQeMKwSTnjgtbLSccRPY](https://testnet.suivision.xyz/txblock/4t9Rkd4t6u5FLuQhmuBmBfdSjQeMKwSTnjgtbLSccRPY)
 package id: 0xd5bec708e04626b31e8f953ef1f6d6d5b79b4a837446a450633b004183233d5c
 Objects:
+
 - PlatformAdminCap: 0xf9b0d25e7d16899a102a2167013ce31ab4b08fe6b70379f24581f3e259282754
 - GlobalSettings: 0xa74d6d2d7cab3cec42cfad85e3211d183372701ed29b13962144a8e0e050ad45
 
@@ -21,8 +31,7 @@ Objects:
 
 package id: 0x6f5f78fbfc1c6d1b5de790a549b8cd0d34109671f8d330ba52bd641e24209aa9
 Objects:
+
 - PlatformAdminCap: 0xc677e9903cd8a911529ae1b4cf56b919ea2a608aa6d6e5c523b54c905b7d338e
 - GlobalSettings: 0xd608a92432a6c3e526e450874c10f7569780f29c557323576ffc97cf1fc2d37e
 - example pod: 0x6f5f78fbfc1c6d1b5de790a549b8cd0d34109671f8d330ba52bd641e24209aa9
-
-
