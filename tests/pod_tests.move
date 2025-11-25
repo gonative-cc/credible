@@ -31,6 +31,7 @@ const SUBS_START_DELTA: u64 = MINUTE; // time delta from "now" to subscription s
 const SUBS_DURATION: u64 = DAY * 7;
 const VESTING_DURATION: u64 = DAY * 100;
 const GRACE_DURATION: u64 = DAY * 3;
+const CLIFF_DURATION: u64 = DAY;
 
 // Helper functions for assertions
 fun assert_u64_eq(a: u64, b: u64) {
@@ -53,6 +54,25 @@ fun init1(owner: address): (Scenario, Clock, GlobalSettings) {
         SUBS_DURATION,
         VESTING_DURATION,
         IMMEDIATE_UNLOCK_PM,
+        0, // cliff_duration
+        false, // cliff_token_immediate_unlock
+    )
+}
+
+/// creates Pod<SUI, SUI> with cliff
+fun init_cliff(owner: address, cliff_unlock: bool): (Scenario, Clock, GlobalSettings) {
+    init_t(
+        owner,
+        REQUIRED_TOKENS,
+        TOKEN_PRICE,
+        PRICE_MULTIPLIER,
+        MIN_GOAL,
+        MAX_GOAL,
+        SUBS_DURATION,
+        VESTING_DURATION,
+        IMMEDIATE_UNLOCK_PM,
+        CLIFF_DURATION,
+        cliff_unlock,
     )
 }
 
@@ -67,6 +87,8 @@ fun init_t(
     subs_dur: u64,
     vesting_dur: u64,
     immediate_unlock_pm: u64,
+    cliff_dur: u64,
+    cliff_token_immediate_unlock: bool,
 ): (Scenario, Clock, GlobalSettings) {
     let mut scenario = test_scenario::begin(owner);
     let mut clock = sui::clock::create_for_testing(scenario.ctx());
@@ -92,6 +114,8 @@ fun init_t(
         subs_dur,
         vesting_dur,
         immediate_unlock_pm,
+        cliff_dur,
+        cliff_token_immediate_unlock,
         tokens,
         setup_fee,
         &clock,
@@ -149,6 +173,8 @@ fun test_create_pod_invalid_min_goal() {
         SUBS_DURATION,
         VESTING_DURATION,
         IMMEDIATE_UNLOCK_PM,
+        0,
+        false,
     );
     test_scenario::return_shared(settings);
     c.destroy_for_testing();
@@ -168,6 +194,8 @@ fun test_create_pod_max_less_than_min() {
         SUBS_DURATION,
         VESTING_DURATION,
         IMMEDIATE_UNLOCK_PM,
+        0,
+        false,
     );
     test_scenario::return_shared(settings);
     c.destroy_for_testing();
@@ -187,6 +215,8 @@ fun test_create_pod_subscription_duration_too_short() {
         DAY * 1, // subscription duration
         VESTING_DURATION,
         IMMEDIATE_UNLOCK_PM,
+        0,
+        false,
     );
     test_scenario::return_shared(settings);
     c.destroy_for_testing();
@@ -206,6 +236,8 @@ fun test_create_pod_subscription_duration_too_long() {
         DAY * 31, // subscription duration > 30 days
         VESTING_DURATION,
         IMMEDIATE_UNLOCK_PM,
+        0,
+        false,
     );
     test_scenario::return_shared(settings);
     c.destroy_for_testing();
@@ -225,6 +257,8 @@ fun test_create_pod_vesting_duration_too_short() {
         SUBS_DURATION,
         DAY * 1, // vesting duration
         IMMEDIATE_UNLOCK_PM,
+        0,
+        false,
     );
     test_scenario::return_shared(settings);
     c.destroy_for_testing();
@@ -244,6 +278,8 @@ fun test_create_pod_vesting_duration_too_long() {
         SUBS_DURATION,
         DAY * 30 * 25, // 25 months > 24 months max
         IMMEDIATE_UNLOCK_PM,
+        0,
+        false,
     );
     test_scenario::return_shared(settings);
     c.destroy_for_testing();
@@ -263,6 +299,8 @@ fun test_create_pod_immediate_unlock_too_high() {
         SUBS_DURATION,
         VESTING_DURATION,
         110, // 11% > 10% max (should fail)
+        0,
+        false,
     );
     test_scenario::return_shared(settings);
     c.destroy_for_testing();
@@ -282,6 +320,8 @@ fun test_create_pod_wrong_token_supply() {
         SUBS_DURATION,
         VESTING_DURATION,
         IMMEDIATE_UNLOCK_PM,
+        0,
+        false,
     );
     test_scenario::return_shared(settings);
     c.destroy_for_testing();
@@ -666,6 +706,47 @@ fun test_founder_claim_funds() {
 }
 
 #[test]
+fun test_founder_claim_funds_with_cliff() {
+    let founder = @0x1;
+    let investor = @0x2;
+
+    let (mut scenario, mut clock, settings) = init_cliff(founder, true);
+
+    // Fast forward to just before subscription ends, then invest
+    clock.increment_for_testing(DAY * 7);
+    scenario.next_tx(investor);
+    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
+    let investment = mint_for_testing(1_000_000, scenario.ctx());
+    let excess = pod.invest(investment, &clock, scenario.ctx());
+    transfer::public_transfer(excess, @0x0);
+    test_scenario::return_shared(pod);
+
+    // Fast forward past grace to cliff
+    clock.increment_for_testing(GRACE_DURATION + MINUTE);
+    scenario.next_tx(founder);
+    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
+    let cap = scenario.take_from_sender<PodAdminCap>();
+    // Verify pod is in cliff
+    assert!(pod.pod_status(&clock) == pod::status_cliff());
+
+    let claimed_funds = pod.founder_claim_funds(
+        &cap,
+        &clock,
+        scenario.ctx(),
+    );
+
+    // Should receive immediate unlock
+    // Investment: 1_000_000, immediate unlock: 50_000
+    let expected = 50_000;
+    assert_u64_eq(claimed_funds.value(), expected);
+    transfer::public_transfer(claimed_funds, @0x0);
+
+    test_scenario::return_to_sender(&scenario, cap);
+    cleanup(clock, pod, settings);
+    scenario.end();
+}
+
+#[test]
 fun test_withdraw_unallocated_tokens() {
     let founder = @0x1;
     let investor = @0x2;
@@ -690,7 +771,7 @@ fun test_withdraw_unallocated_tokens() {
     let cap = scenario.take_from_sender<PodAdminCap>();
 
     let unallocated = pod.pod_token_vault_value() - pod.pod_total_allocated();
-    let withdrawn = pod.withdraw_unallocated_tokens(
+    let withdrawn = pod.founder_claim_unallocated_tokens(
         &cap,
         &clock,
         scenario.ctx(),
@@ -699,6 +780,54 @@ fun test_withdraw_unallocated_tokens() {
     transfer::public_transfer(withdrawn, @0x0);
 
     test_scenario::return_to_sender(&scenario, cap);
+    cleanup(clock, pod, settings);
+    scenario.end();
+}
+
+#[test]
+fun test_investor_claim_tokens_with_cliff() {
+    let founder = @0x1;
+    let investor = @0x2;
+
+    let (mut scenario, mut clock, settings) = init_cliff(founder, true);
+
+    // Fast forward to just before subscription ends, then invest
+    clock.increment_for_testing(DAY * 7);
+    scenario.next_tx(investor);
+    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
+    let investment = mint_for_testing(1_000_000, scenario.ctx());
+    let excess = pod.invest(investment, &clock, scenario.ctx());
+    transfer::public_transfer(excess, @0x0);
+    test_scenario::return_shared(pod);
+
+    // Fast forward past grace to cliff start
+    clock.increment_for_testing(GRACE_DURATION + MINUTE);
+    scenario.next_tx(investor);
+    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
+    // Verify pod is now in cliff
+    assert!(pod.pod_status(&clock) == pod::status_cliff());
+
+    // Investor claims tokens during cliff
+    let claimed_tokens = pod.investor_claim_tokens(&clock, scenario.ctx());
+    // Investment: 1_000_000, Token allocation: 1_000_000 * 10 / 1 = 10_000_000 tokens
+    // Immediate unlock (5%): 10_000_000 * 0.05 = 500_000 tokens
+    assert!(claimed_tokens.value() == 500_000);
+    transfer::public_transfer(claimed_tokens, @0x0);
+    test_scenario::return_shared(pod);
+
+    // Fast forward past cliff to vesting => 1 min after vesting start,
+    // because above we added 1 min after grace.
+    clock.increment_for_testing(CLIFF_DURATION);
+    scenario.next_tx(investor);
+    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
+    // Verify pod is now in vesting
+    assert!(pod.pod_status(&clock) == pod::status_vesting());
+
+    let claimed_tokens2 = pod.investor_claim_tokens(&clock, scenario.ctx());
+    let expected = (10_000_000 - 500_000) * MINUTE / VESTING_DURATION;
+    assert!(claimed_tokens2.value() == expected);
+    transfer::public_transfer(claimed_tokens2, @0x0);
+
     cleanup(clock, pod, settings);
     scenario.end();
 }
@@ -1041,7 +1170,7 @@ fun test_grace_and_vesting_status() {
     clock.increment_for_testing(DAY * 3);
     scenario.next_tx(founder);
     let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
-    assert_u8_eq(pod.pod_status(&clock), 4); // VESTING
+    assert_u8_eq(pod.pod_status(&clock), 5); // VESTING
 
     cleanup(clock, pod, settings);
     scenario.end();
