@@ -316,7 +316,7 @@ public fun create_pod<C, T>(
     assert!(valid_links, E_WRONG_URL_LEN);
 
     let valid_strings = (
-        name.length() > 4 && name.length() < 32 &&
+        name.length() >= 4 && name.length() <= 32 &&
             description.length() <= 64,
     );
     assert!(valid_strings, E_WRONG_LEN);
