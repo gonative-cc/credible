@@ -505,12 +505,13 @@ public fun invest<C, T>(
         actual_investment
     };
 
-    emit(EventInvestmentMade { pod_id: object::id(pod), investor, total_investment });
+    let pod_id = object::id(pod);
+    emit(EventInvestmentMade { pod_id, investor, total_investment });
 
     if (pod.total_raised >= pod.params.max_goal) {
         // This triggers grace/vesting
         pod.params.subscription_end = clock::timestamp_ms(clock);
-        emit(EventPodMaxGoal { pod_id: object::id(pod) });
+        emit(EventPodMaxGoal { pod_id });
     };
 
     excess_coin
@@ -684,7 +685,8 @@ public fun founder_claim_funds<C, T>(
     clock: &Clock,
     ctx: &mut TxContext,
 ): Coin<C> {
-    assert!(cap.pod_id == object::id(pod), E_NOT_ADMIN);
+    let pod_id = object::id(pod);
+    assert!(cap.pod_id == pod_id, E_NOT_ADMIN);
     let status = pod.pod_status(clock);
     assert!(status == STATUS_VESTING || status == STATUS_CLIFF, E_POD_NOT_VESTING);
 
@@ -694,7 +696,7 @@ public fun founder_claim_funds<C, T>(
 
     pod.founder_claimed_funds = pod.founder_claimed_funds + to_claim;
     emit(EventFounderClaim {
-        pod_id: object::id(pod),
+        pod_id,
         total_amount: pod.founder_claimed_funds,
     });
     coin::take(&mut pod.funds_vault, to_claim, ctx)
@@ -706,10 +708,11 @@ public fun failed_pod_withdraw<C, T>(
     clock: &Clock,
     ctx: &mut TxContext,
 ): Coin<T> {
-    assert!(cap.pod_id == object::id(pod), E_NOT_ADMIN);
+    let pod_id = object::id(pod);
+    assert!(cap.pod_id == pod_id, E_NOT_ADMIN);
     assert!(pod_status(pod, clock) == STATUS_FAILED, E_POD_NOT_FAILED);
 
-    emit(EventFailedPodWithdraw { pod_id: object::id(pod) });
+    emit(EventFailedPodWithdraw { pod_id });
     coin::from_balance(pod.token_vault.withdraw_all(), ctx)
 }
 
@@ -720,12 +723,13 @@ public fun founder_claim_unallocated_tokens<C, T>(
     clock: &Clock,
     ctx: &mut TxContext,
 ): Coin<T> {
-    assert!(cap.pod_id == object::id(pod), E_NOT_ADMIN);
+    let pod_id = object::id(pod);
+    assert!(cap.pod_id == pod_id, E_NOT_ADMIN);
     assert!(pod_status(pod, clock) == STATUS_VESTING, E_POD_NOT_VESTING);
 
     let amount = pod.token_vault.value() - pod.total_allocated;
     assert!(amount > 0, E_NOTHING_TO_CLAIM);
-    emit(EventUnallocatedTokensWithdrawn { pod_id: object::id(pod), amount });
+    emit(EventUnallocatedTokensWithdrawn { pod_id, amount });
 
     coin::take(&mut pod.token_vault, amount, ctx)
 }
