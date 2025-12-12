@@ -6,7 +6,8 @@ This repository provides Sui Move packages (smart contracts).
 
 ## Synopsis
 
-Beelievers Kickstarter is a decentralized crowdfunding and incubation platform with a token distribution mechanism, built on Sui blockchain. It's designed to launch and accelerate the next generation of innovative projects from _DeFi and beyond_.
+Credible is a decentralized crowdfunding and token distribution platform built on Sui blockchain. It empowers project founders to raise funds transparently while protecting investors through smart contract-enforced mechanisms.
+It's designed to launch and accelerate the next generation of innovative projects from _DeFi and beyond_.
 
 Following the [Beelievers](https://www.gonative.cc/beelievers) mission:
 

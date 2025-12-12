@@ -1,18 +1,19 @@
 module beelievers_kickstarter::pod;
 
-use std::ascii;
 use std::string::String;
 use sui::balance::{Self, Balance};
 use sui::clock::{Self, Clock};
 use sui::coin::{Self, Coin};
+use sui::dynamic_field as df;
 use sui::event::emit;
 use sui::sui::SUI;
 use sui::table::{Self, Table};
-use sui::url::{Self, Url};
 
 // --- Constants ---
 const PERMILLE: u64 = 1000; // For permille calculations
 const PERMILLE_U128: u128 = 1000; // For permille calculations
+
+const KeyPodInfo: u8 = 1;
 
 // Pod Statuses
 const STATUS_INACTIVE: u8 = 0;
@@ -23,10 +24,10 @@ const STATUS_CLIFF: u8 = 4;
 const STATUS_VESTING: u8 = 5;
 
 // --- Error Codes ---
-const E_INVALID_PARAMS: u64 = 0;
 const E_POD_NOT_SUBSCRIPTION: u64 = 1;
 const E_POD_NOT_VESTING: u64 = 2;
 const E_POD_NOT_FAILED: u64 = 3;
+const E_INVALID_PARAMS: u64 = 4;
 const E_NOT_ADMIN: u64 = 5;
 const E_INVESTMENT_NOT_FOUND: u64 = 6;
 const E_INVESTMENT_CANCELLED: u64 = 7;
@@ -37,6 +38,10 @@ const E_INVALID_TOKEN_SUPPLY: u64 = 11;
 const E_NOTHING_TO_CLAIM: u64 = 12;
 const E_NOTHING_TO_EXIT: u64 = 13;
 const E_ZERO_INVESTMENT: u64 = 14;
+const E_WRONG_URL_LEN: u64 = 15;
+const E_WRONG_LEN: u64 = 16;
+
+const MAX_URL_LEN: u64 = 42;
 
 //
 // --- Module Initialization ---
@@ -83,12 +88,17 @@ public struct InvestorRecord has copy, drop, store {
     cancelled: bool,
 }
 
+public struct PodInfo has copy, drop, store {
+    name: String,
+    description: String,
+    forum_url: String,
+    pitch_deck: String,
+    business_plan: String,
+}
+
 /// The main struct representing a funding campaign.
 public struct Pod<phantom C, phantom T> has key {
     id: UID,
-    name: String,
-    description: String,
-    forum_url: Url,
     token_vault: Balance<T>,
     funds_vault: Balance<C>,
     total_allocated: u64,
@@ -244,7 +254,11 @@ public struct EventExitInvestment has copy, drop {
     total_investment: u64,
     total_allocation: u64,
 }
-public struct EventInvestorClaim has copy, drop { pod_id: ID, investor: address, total_amount: u64 }
+public struct EventInvestorClaim has copy, drop {
+    pod_id: ID,
+    investor: address,
+    total_amount: u64,
+}
 public struct EventFounderClaim has copy, drop { pod_id: ID, total_amount: u64 }
 public struct EventFailedPodRefund has copy, drop { pod_id: ID, investor: address }
 public struct EventFailedPodWithdraw has copy, drop { pod_id: ID }
@@ -258,7 +272,9 @@ public fun create_pod<C, T>(
     settings: &GlobalSettings,
     name: String,
     description: String,
-    forum_url: ascii::String,
+    forum_url: String,
+    pitch_deck: String,
+    business_plan: String,
     token_price: u64,
     price_multiplier: u64,
     min_goal: u64,
@@ -289,6 +305,21 @@ public fun create_pod<C, T>(
             price_multiplier > 0,
     );
     assert!(params_valid, E_INVALID_PARAMS);
+    let fu_len = forum_url.length();
+    let pd_len = pitch_deck.length();
+    let bp_len = business_plan.length();
+    let valid_links = (
+        fu_len > 8 && fu_len <= MAX_URL_LEN &&
+        pd_len > 8 && pd_len <= MAX_URL_LEN &&
+        bp_len > 8 && bp_len <= MAX_URL_LEN,
+    );
+    assert!(valid_links, E_WRONG_URL_LEN);
+
+    let valid_strings = (
+        name.length() > 4 && name.length() < 32 &&
+            description.length() <= 64,
+    );
+    assert!(valid_strings, E_WRONG_LEN);
 
     // cliff_token_immediate_unlock must be false if cliff_duration is 0
     if (cliff_duration == 0) {
@@ -318,12 +349,8 @@ public fun create_pod<C, T>(
         cliff_duration,
         cliff_token_immediate_unlock,
     };
-
-    let pod = Pod<C, T> {
+    let mut pod = Pod<C, T> {
         id: object::new(ctx),
-        name,
-        description,
-        forum_url: url::new_unsafe(forum_url),
         token_vault: tokens.into_balance(),
         funds_vault: balance::zero<C>(),
         investments: table::new(ctx),
@@ -334,9 +361,21 @@ public fun create_pod<C, T>(
         reached_min_goal: false,
         params,
     };
-
     let pod_id = object::id(&pod);
     let cap = PodAdminCap { id: object::new(ctx), pod_id };
+    let pod_info = PodInfo {
+        name,
+        description,
+        forum_url,
+        pitch_deck,
+        business_plan,
+    };
+
+    df::add(
+        &mut pod.id,
+        KeyPodInfo,
+        pod_info,
+    );
 
     emit(EventPodCreated { pod_id, founder: ctx.sender() });
 
@@ -347,6 +386,10 @@ public fun create_pod<C, T>(
 // --- Public View Functions ---
 
 public fun get_pod_params<C, T>(pod: &Pod<C, T>): PodParams { pod.params }
+
+public fun get_pod_info<C, T>(pod: &Pod<C, T>): PodInfo {
+    *df::borrow<u8, PodInfo>(&pod.id, KeyPodInfo)
+}
 
 public fun get_pod_total_raised<C, T>(p: &Pod<C, T>): u64 { p.total_raised }
 
@@ -720,7 +763,11 @@ public fun calculate_vested_tokens(
     if (time_elapsed >= vesting_duration) {
         return allocation
     };
-    let vested_tokens = ratio_ext(time_elapsed, (allocation - immediate_unlock), vesting_duration);
+    let vested_tokens = ratio_ext(
+        time_elapsed,
+        (allocation - immediate_unlock),
+        vesting_duration,
+    );
     return immediate_unlock + vested_tokens
 }
 

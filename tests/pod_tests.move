@@ -11,7 +11,6 @@ use beelievers_kickstarter::pod::{
     init_for_tests,
     create_pod
 };
-use std::ascii;
 use sui::clock::Clock;
 use sui::coin::mint_for_testing;
 use sui::sui::SUI;
@@ -105,7 +104,9 @@ fun init_t(
         &settings,
         b"My Project".to_string(),
         b"Great project".to_string(),
-        ascii::string(b"https://forum.example.com"),
+        b"https://forum.example.com".to_string(),
+        b"https://pitch.example.com".to_string(),
+        b"https://business.example.com".to_string(),
         token_price,
         price_multiplier,
         min_goal,
