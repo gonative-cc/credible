@@ -1,4 +1,4 @@
-# Beelievers Kickstarter
+# Credible: Beelievers Kickstarter
 
 _Bring creative projects to life with incentives for BTCFi_
 
@@ -6,7 +6,8 @@ This repository provides Sui Move packages (smart contracts).
 
 ## Synopsis
 
-Beelievers Kickstarter is a decentralized crowdfunding and incubation platform with a token distribution mechanism, built on Sui blockchain. It's designed to launch and accelerate the next generation of innovative projects from _DeFi and beyond_.
+Credible is a decentralized crowdfunding and token distribution platform built on Sui blockchain. It empowers project founders to raise funds transparently while protecting investors through smart contract-enforced mechanisms.
+It's designed to launch and accelerate the next generation of innovative projects from _DeFi and beyond_.
 
 Following the [Beelievers](https://www.gonative.cc/beelievers) mission:
 
@@ -51,7 +52,52 @@ BTCFi ecosystem face a critical bottleneck:
 - Projects founders (team): create a funding campaign.
 - Beelievers Committee: Curates projects and manages incentives.
 
+| Phase             | Duration                                                 | Investors can…                                                                  | Founders can…                |
+| ----------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------- |
+| 1. Pod Creation   |                                                          |                                                                                 | Create pod + lock tokens     |
+| 2. Subscription   | start → end date<br> -- or time when max goal is reached | - Subscribe<br>- Cancel                                                         |                              |
+| 3. Grace Period   | Fixed (global)                                           | Exit with grace fee                                                             |                              |
+| 4.1 Vesting Cliff | cliff_duration                                           | - Exit<br>- If `cliff_token_immediate_unlock`: claim immediate_unlock of tokens | Claim immediate_unlock funds |
+| 4.2 Vesting       | token_vesting                                            | - Exit<br>- Claim vested tokens                                                 | Claim vested funds           |
+
 ### Flow
+
+```mermaid
+graph TD
+    %% Nodes
+    P1[<b>PHASE 1: CREATION</b><br/>Setup & Supply Tokens]
+    P2[<b>PHASE 2: SUBSCRIPTION</b><br/>Investors Deposit Funds]
+    Check{Min Goal<br/>Reached?}
+    Fail[<b>CANCELED</b><br/>100% Refund]
+
+    subgraph Active [Active Project Lifecycle]
+        P3[<b>PHASE 3: GRACE</b><br/>Cool-off Period]
+        P4[<b>PHASE 4: VESTING</b><br/>Cliff • Distribution]
+    end
+
+    %% Exit Logic (Parallel)
+    ExitNode[<b>EXIT MECHANISM</b><br/>Fee • Forfeits Unvested]
+
+    %% Flow
+    P1 --> P2
+    P2 -- "Time End or Max Cap" --> Check
+    Check -- NO --> Fail
+    Check -- YES --> P3
+    P3 --> P4
+
+    %% Exit connections
+    P3 -.-> ExitNode
+    P4 -.-> ExitNode
+
+    %% Styles
+    style P1 fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style P2 fill:#fffde7,stroke:#fbc02d,stroke-width:2px
+    style P3 fill:#e0f2f1,stroke:#00695c,stroke-width:2px
+    style P4 fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    style ExitNode fill:#ffebee,stroke:#c62828,stroke-width:2px,stroke-dasharray: 5 5
+```
+
+### Detailed Flow
 
 Subscription and a setup:
 
@@ -181,29 +227,27 @@ During the grace period:
 - Founders cannot claim funds.
 - Investors can exit their investment with the reduced `grace_fee` and will be available to the Founders.
 
-### Phase 3.5: Cliff Period
+### Phase 4: Vesting Period
 
-Starts immediately after the grace period ends, if `cliff_duration` > 0. The cliff period lasts for `cliff_duration`.
+After grace period:
 
-During the cliff period:
-
-- Tokens are not yet vesting; investors cannot claim tokens unless `cliff_token_immediate_unlock` is true, in which case they can claim `immediate_unlock` of their tokens.
-- Founders can claim `immediate_unlock` of their funds.
-- Investors can exit their investment with the `immediate_unlock_pm` fee.
-
-### Phase 4: Vesting and Token Distribution
-
-Starts when the minimum investment goal is reached and the subscription period ended. Let `F` be the total amount of funds raised.
-
-Right after the grace period:
-
-- Investors can claim `immediate_unlock` of their token allocation.
-- Founders can claim `immediate_unlock × F`.
+- Founders can immediately claim `immediate_unlock` of their funds.
 - Founders can withdraw the unallocated tokens.
+- Investors can exit their investment paying the exit fee explained in the [Exith Mechanism](#exit-mechanism) section.
 
-Following this, a linear real-time vesting period begins:
+#### Cliff Period
 
-- Founders receive funds according to the vesting schedule.
+If `cliff_duration` > 0, the Cliff Period starts and lasts for `cliff_duration`. During that period:
+
+- Tokens are not yet vesting;
+- If `cliff_token_immediate_unlock` is true, investors can claim `immediate_unlock` of their tokens.
+
+#### Token Distribution Period
+
+If there is no cliff, it starts right after the grace period, otherwise starts after the cliff and lasts for `token_duration`.
+A linear real-time vesting period begins:
+
+- Founders can claim their vested funds.
 - Investors can claim their vested tokens.
 
 Progress Update: Founders should provide regular progress updates through the linked forum/discourse thread (this is not tracked on-chain). Failure to provide updates may trigger investor exiting form their investment.
