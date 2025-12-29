@@ -104,6 +104,7 @@ fun init_t(
         &settings,
         b"My Project".to_string(),
         b"Great project".to_string(),
+        b"https://example.com".to_string(),
         b"https://forum.example.com".to_string(),
         b"https://pitch.example.com".to_string(),
         b"https://business.example.com".to_string(),
