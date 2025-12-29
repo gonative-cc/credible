@@ -41,7 +41,7 @@ const E_ZERO_INVESTMENT: u64 = 14;
 const E_WRONG_URL_LEN: u64 = 15;
 const E_WRONG_LEN: u64 = 16;
 
-const MAX_URL_LEN: u64 = 42;
+const MAX_URL_LEN: u64 = 48;
 
 //
 // --- Module Initialization ---
@@ -91,6 +91,7 @@ public struct InvestorRecord has copy, drop, store {
 public struct PodInfo has copy, drop, store {
     name: String,
     description: String,
+    website: String,
     forum_url: String,
     pitch_deck: String,
     business_plan: String,
@@ -272,6 +273,7 @@ public fun create_pod<C, T>(
     settings: &GlobalSettings,
     name: String,
     description: String,
+    website: String,
     forum_url: String,
     pitch_deck: String,
     business_plan: String,
@@ -308,10 +310,12 @@ public fun create_pod<C, T>(
     let fu_len = forum_url.length();
     let pd_len = pitch_deck.length();
     let bp_len = business_plan.length();
+    let w_len = website.length();
     let valid_links = (
         fu_len > 8 && fu_len <= MAX_URL_LEN &&
         pd_len > 8 && pd_len <= MAX_URL_LEN &&
-        bp_len > 8 && bp_len <= MAX_URL_LEN,
+        bp_len > 8 && bp_len <= MAX_URL_LEN &&
+        w_len > 8 && w_len <= MAX_URL_LEN,
     );
     assert!(valid_links, E_WRONG_URL_LEN);
 
@@ -365,6 +369,7 @@ public fun create_pod<C, T>(
     let cap = PodAdminCap { id: object::new(ctx), pod_id };
     let pod_info = PodInfo {
         name,
+        website,
         description,
         forum_url,
         pitch_deck,
