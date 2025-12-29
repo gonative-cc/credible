@@ -1,5 +1,15 @@
 # Deployment info
 
+## v0.2.1 Dec 29 2025
+
+Deployment Tx: [4BU4XVPArspWU492pUyW7wFAzPmr7FBmowjMEgqzPHiq](https://testnet.suivision.xyz/txblock/4BU4XVPArspWU492pUyW7wFAzPmr7FBmowjMEgqzPHiq)
+package id: 0xa3a7b54b1a2c784c8161831ab9b3cc0231e66ac8037b22f11cbcf49e5a62b853
+Objects:
+
+- PlatformAdminCap: 0x1986cedc884c99e2414bdef3488e9f379875b9499a510e3ef378dc8c7c44c038
+- UpgradeCap: 0xf9552bde69cb305c5110d4083027a8097651aea4c739a32f67b3711730907de2
+- GlobalSettings: 0xffc614573cb14142109386a43668c2ce51e4ab1ea20adbb89990329379dae772
+
 ## v0.2.0 Dec 13 2025
 
 Deployment Tx: [FaYzW2KdZPBtjgqPc4CcouiruyUSWVrrQWY9w33wQ4CP](https://testnet.suivision.xyz/txblock/FaYzW2KdZPBtjgqPc4CcouiruyUSWVrrQWY9w33wQ4CP)
@@ -9,7 +19,6 @@ Objects:
 - PlatformAdminCap: 0x9055e1485ad3b451c400452d4a0476721d2c0ceba3c8bcdc1b207336f875ca6e
 - UpgradeCap: 0x0402fff6d35e827fee890abaa54a327bdf453a06a34d8a99f54b20908edf3392
 - GlobalSettings: 0xb4b54873465c102676eddeedb0de3b19382cbab367f4a57be0edbe74e3524870
-
 
 ## v0.1.0 Nov 25
 
