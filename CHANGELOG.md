@@ -15,7 +15,7 @@
 
 - removed `pod::get_grace_fee_pm`
 - renamed: `pod::get_global_settings` to `unpack_global_settings`
-- renamed: removed _get__ prefix from `pod::get_pod_params`, `pod::get_pod_info`, `pod::pod_num_investors`
+- renamed: removed _get__ prefix from `pod::get_pod_params`, `pod::get_pod_info`, `pod::get_pod_num_investors`
 
 ## v0.2.0 (2025-12-12)
 
