@@ -149,10 +149,15 @@ fun init_t(
     (scenario, clock, settings)
 }
 
-fun cleanup<C, T>(c: Clock, pod: Pod<C, T>, settings: GlobalSettings) {
+fun cleanup1(c: Clock, settings: GlobalSettings, scenario: Scenario) {
     test_scenario::return_shared(settings);
-    test_scenario::return_shared(pod);
     c.destroy_for_testing();
+    scenario.end();
+}
+
+fun cleanup<C, T>(c: Clock, pod: Pod<C, T>, settings: GlobalSettings, scenario: Scenario) {
+    test_scenario::return_shared(pod);
+    cleanup1(c, settings, scenario);
 }
 
 // ================================
@@ -180,8 +185,7 @@ fun test_create_pod_success() {
     assert_u64_eq(params.get_pod_immediate_unlock_pm(), IMMEDIATE_UNLOCK_PM);
 
     test_scenario::return_to_sender(&scenario, cap);
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 #[test]
@@ -200,9 +204,7 @@ fun test_create_pod_invalid_min_goal() {
         0,
         false,
     );
-    test_scenario::return_shared(settings);
-    c.destroy_for_testing();
-    scenario.end();
+    cleanup1(c, settings, scenario);
 }
 
 #[test]
@@ -221,9 +223,7 @@ fun test_create_pod_max_less_than_min() {
         0,
         false,
     );
-    test_scenario::return_shared(settings);
-    c.destroy_for_testing();
-    scenario.end();
+    cleanup1(c, settings, scenario);
 }
 
 #[test]
@@ -242,9 +242,7 @@ fun test_create_pod_subscription_duration_too_short() {
         0,
         false,
     );
-    test_scenario::return_shared(settings);
-    c.destroy_for_testing();
-    scenario.end();
+    cleanup1(c, settings, scenario);
 }
 
 #[test]
@@ -263,9 +261,7 @@ fun test_create_pod_subscription_duration_too_long() {
         0,
         false,
     );
-    test_scenario::return_shared(settings);
-    c.destroy_for_testing();
-    scenario.end();
+    cleanup1(c, settings, scenario);
 }
 
 #[test]
@@ -284,9 +280,7 @@ fun test_create_pod_vesting_duration_too_short() {
         0,
         false,
     );
-    test_scenario::return_shared(settings);
-    c.destroy_for_testing();
-    scenario.end();
+    cleanup1(c, settings, scenario);
 }
 
 #[test]
@@ -305,9 +299,7 @@ fun test_create_pod_vesting_duration_too_long() {
         0,
         false,
     );
-    test_scenario::return_shared(settings);
-    c.destroy_for_testing();
-    scenario.end();
+    cleanup1(c, settings, scenario);
 }
 
 #[test]
@@ -326,9 +318,7 @@ fun test_create_pod_immediate_unlock_too_high() {
         0,
         false,
     );
-    test_scenario::return_shared(settings);
-    c.destroy_for_testing();
-    scenario.end();
+    cleanup1(c, settings, scenario);
 }
 
 #[test]
@@ -347,9 +337,7 @@ fun test_create_pod_wrong_token_supply() {
         0,
         false,
     );
-    test_scenario::return_shared(settings);
-    c.destroy_for_testing();
-    scenario.end();
+    cleanup1(c, settings, scenario);
 }
 
 // ================================
@@ -370,8 +358,7 @@ fun test_successful_investment() {
     // Verify investment was recorded
     assert_u64_eq(pod.pod_total_allocated(), (100_000 * PRICE_MULTIPLIER) / TOKEN_PRICE);
 
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 #[test]
@@ -388,8 +375,7 @@ fun test_invest_before_subscription() {
     let _excess = pod.invest(&settings, investment, &clock, scenario.ctx());
     transfer::public_transfer(_excess, @0x0);
 
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 #[test]
@@ -413,8 +399,7 @@ fun test_invest_after_subscription_end() {
     let _excess = pod.invest(&settings, investment, &clock, scenario.ctx());
     transfer::public_transfer(_excess, @0x0);
 
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 #[test]
@@ -442,8 +427,7 @@ fun test_max_goal_reached_early() {
     assert_u64_eq(params.get_pod_subscription_end(), clock.timestamp_ms());
     transfer::public_transfer(excess2, @0x0);
 
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 #[test]
@@ -466,8 +450,7 @@ fun test_invest_after_max_goal() {
     let _excess = pod.invest(&settings, investment2, &clock, scenario.ctx());
     transfer::public_transfer(_excess, @0x0);
 
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 #[test]
@@ -491,8 +474,7 @@ fun test_multiple_investments_same_investor() {
     // Total should be combined
     assert_u64_eq(pod.get_pod_total_raised(), 150_000);
 
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 #[test]
@@ -519,8 +501,7 @@ fun test_cancel_subscription() {
     // Total raised should be reduced
     assert_u64_eq(pod.get_pod_total_raised(), kept);
 
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 #[test]
@@ -552,8 +533,7 @@ fun test_cancel_subscription_only_once() {
     );
     transfer::public_transfer(_refund2, @0x0);
 
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 // ================================
@@ -630,8 +610,7 @@ fun test_investor_claim_tokens() {
     // second claim after 1 day
     // another claim at the end of the vesting
 
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 #[test]
@@ -670,8 +649,7 @@ fun test_founder_claim_funds() {
     transfer::public_transfer(claimed_funds, @0x0);
 
     test_scenario::return_to_sender(&scenario, cap);
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 #[test]
@@ -712,8 +690,7 @@ fun test_founder_claim_funds_with_cliff() {
     transfer::public_transfer(claimed_funds, @0x0);
 
     test_scenario::return_to_sender(&scenario, cap);
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 #[test]
@@ -743,8 +720,7 @@ fun test_withdraw_unallocated_tokens() {
     let _claimed = pod.investor_claim_tokens(&clock, scenario.ctx());
     transfer::public_transfer(_claimed, @0x0);
 
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 #[test]
@@ -773,8 +749,7 @@ fun test_grace_period_cannot_claim_funds() {
     transfer::public_transfer(_claimed, @0x0);
 
     test_scenario::return_to_sender(&scenario, cap);
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 // ================================
@@ -820,8 +795,7 @@ fun test_exit_grace_period() {
     transfer::public_transfer(refund, @0x0);
     transfer::public_transfer(vested_tokens, @0x0);
 
-    cleanup(clock, pod, s);
-    scenario.end();
+    cleanup(clock, pod, s, scenario);
 }
 
 #[test]
@@ -842,8 +816,7 @@ fun test_exit_after_grace_period() {
     transfer::public_transfer(refund, @0x0);
     transfer::public_transfer(vested_tokens, @0x0);
 
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 #[test]
@@ -866,8 +839,7 @@ fun test_exit_grace_period_only_once() {
     transfer::public_transfer(_refund2, @0x0);
     transfer::public_transfer(_vested2, @0x0);
 
-    cleanup(clock, pod, s);
-    scenario.end();
+    cleanup(clock, pod, s, scenario);
 }
 
 #[test]
@@ -890,8 +862,7 @@ fun test_exit_after_grace_period_only_once() {
     transfer::public_transfer(_refund2, @0x0);
     transfer::public_transfer(_vested2, @0x0);
 
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 // ================================
@@ -918,8 +889,7 @@ fun test_failed_pod_refund() {
     assert_u64_eq(refund.value(), 500_000);
     transfer::public_transfer(refund, @0x0);
 
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 #[test]
@@ -944,8 +914,7 @@ fun test_failed_pod_withdraw_tokens() {
     transfer::public_transfer(withdrawn, @0x0);
 
     test_scenario::return_to_sender(&scenario, cap);
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 // ================================
@@ -961,8 +930,7 @@ fun test_zero_investment() {
     let _excess = pod.invest(&settings, investment, &clock, scenario.ctx());
     transfer::public_transfer(_excess, @0x0);
 
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 #[test]
@@ -992,8 +960,7 @@ fun test_pod_status_transitions() {
     let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     assert_u8_eq(pod.pod_status(&clock), 2);
 
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 #[test]
@@ -1018,8 +985,7 @@ fun test_grace_and_vesting_status() {
     let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     assert_u8_eq(pod.pod_status(&clock), 5); // VESTING
 
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 #[test]
@@ -1114,8 +1080,7 @@ fun test_full_pod_lifecycle_success() {
     transfer::public_transfer(refund, @0x0);
     transfer::public_transfer(vested_tokens, @0x0);
 
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
 
 #[test]
@@ -1167,6 +1132,5 @@ fun test_full_pod_lifecycle_failure() {
     transfer::public_transfer(withdrawn_tokens, @0x0);
 
     test_scenario::return_to_sender(&scenario, cap);
-    cleanup(clock, pod, settings);
-    scenario.end();
+    cleanup(clock, pod, settings, scenario);
 }
