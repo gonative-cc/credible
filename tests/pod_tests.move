@@ -49,6 +49,19 @@ fun accept_latest_tc(settings: &mut GlobalSettings, scenario: &mut Scenario) {
     settings.accept_tc(tc_version, scenario.ctx());
 }
 
+fun invest1<C, T>(
+    pod: &mut Pod<C, T>,
+    settings: &GlobalSettings,
+    amount: u64,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    let investment = mint_for_testing(amount, ctx);
+    let _excess = pod.invest(settings, investment, clock, ctx);
+    assert_u64_eq(_excess.value(), 0);
+    transfer::public_transfer(_excess, @0x0);
+}
+
 /// creates Pod<SUI, SUI>
 fun init1(owner: address): (Scenario, Clock, GlobalSettings) {
     init_t(
@@ -364,17 +377,8 @@ fun test_successful_investment() {
 #[test]
 #[expected_failure(abort_code = pod::E_POD_NOT_SUBSCRIPTION)]
 fun test_invest_before_subscription() {
-    let founder = @0x1;
-    let investor = @0x2;
-
-    let (mut scenario, clock, settings) = init1(founder);
-
-    scenario.next_tx(investor);
-    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
-    let investment = mint_for_testing(100_000, scenario.ctx());
-    let _excess = pod.invest(&settings, investment, &clock, scenario.ctx());
-    transfer::public_transfer(_excess, @0x0);
-
+    let (mut scenario, mut clock, mut settings, mut pod) = init2(1);
+    invest1(&mut pod, &settings, 100_000, &clock, scenario.ctx());
     cleanup(clock, pod, settings, scenario);
 }
 
@@ -411,12 +415,10 @@ fun test_max_goal_reached_early() {
     let excess1 = pod.invest(&settings, investment1, &clock, scenario.ctx());
     assert_u64_eq(excess1.value(), 0);
     transfer::public_transfer(excess1, @0x0);
-    test_scenario::return_shared(pod);
 
     // Second investment exceeds max, excess returned
     scenario.next_tx(investor2);
     accept_latest_tc(&mut settings, &mut scenario);
-    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     let investment2 = mint_for_testing(200_000, scenario.ctx());
     let excess2 = pod.invest(&settings, investment2, &clock, scenario.ctx());
 
@@ -437,18 +439,12 @@ fun test_invest_after_max_goal() {
     let (mut scenario, mut clock, mut settings, mut pod) = init2(TIME_SUBCRIB);
 
     // First investment reaches max
-    let investment1 = mint_for_testing(1_000_000, scenario.ctx());
-    let excess1 = pod.invest(&settings, investment1, &clock, scenario.ctx());
-    transfer::public_transfer(excess1, @0x0);
-    test_scenario::return_shared(pod);
+    invest1(&mut pod, &settings, 1_000_000, &clock, scenario.ctx());
 
     // Second investment should fail
     scenario.next_tx(investor2);
     accept_latest_tc(&mut settings, &mut scenario);
-    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
-    let investment2 = mint_for_testing(100_000, scenario.ctx());
-    let _excess = pod.invest(&settings, investment2, &clock, scenario.ctx());
-    transfer::public_transfer(_excess, @0x0);
+    invest1(&mut pod, &settings, 100_000, &clock, scenario.ctx());
 
     cleanup(clock, pod, settings, scenario);
 }
@@ -459,17 +455,10 @@ fun test_multiple_investments_same_investor() {
     let (mut scenario, mut clock, mut settings, mut pod) = init2(TIME_SUBCRIB);
 
     // First investment
-    let investment1 = mint_for_testing(100_000, scenario.ctx());
-    let excess1 = pod.invest(&settings, investment1, &clock, scenario.ctx());
-    transfer::public_transfer(excess1, @0x0);
-    test_scenario::return_shared(pod);
-
+    invest1(&mut pod, &settings, 100_000, &clock, scenario.ctx());
     // Second investment from same investor
     scenario.next_tx(investor);
-    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
-    let investment2 = mint_for_testing(50_000, scenario.ctx());
-    let excess2 = pod.invest(&settings, investment2, &clock, scenario.ctx());
-    transfer::public_transfer(excess2, @0x0);
+    invest1(&mut pod, &settings, 50_000, &clock, scenario.ctx());
 
     // Total should be combined
     assert_u64_eq(pod.get_pod_total_raised(), 150_000);
@@ -481,9 +470,7 @@ fun test_multiple_investments_same_investor() {
 fun test_cancel_subscription() {
     let (mut scenario, mut clock, mut settings, mut pod) = init2(TIME_SUBCRIB);
 
-    let investment = mint_for_testing(100_000, scenario.ctx());
-    let excess = pod.invest(&settings, investment, &clock, scenario.ctx());
-    transfer::public_transfer(excess, @0x0);
+    invest1(&mut pod, &settings, 100_000, &clock, scenario.ctx());
 
     // Cancel subscription
     let refund = pod.cancel_subscription(
@@ -511,21 +498,16 @@ fun test_cancel_subscription_only_once() {
     let (mut scenario, mut clock, mut settings, mut pod) = init2(TIME_SUBCRIB);
 
     // Investor invests and cancels
-    scenario.next_tx(investor);
-    let investment = mint_for_testing(100_000, scenario.ctx());
-    let excess = pod.invest(&settings, investment, &clock, scenario.ctx());
-    transfer::public_transfer(excess, @0x0);
+    invest1(&mut pod, &settings, 100_000, &clock, scenario.ctx());
     let refund = pod.cancel_subscription(
         &settings,
         &clock,
         scenario.ctx(),
     );
     transfer::public_transfer(refund, @0x0);
-    test_scenario::return_shared(pod);
 
     // Try to cancel again (should fail)
     scenario.next_tx(investor);
-    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     let _refund2 = pod.cancel_subscription(
         &settings,
         &clock,
@@ -583,16 +565,11 @@ fun test_investor_claim_tokens() {
     let investor = @0x2;
     // Fast forward to just before subscription ends, then invest
     let (mut scenario, mut clock, mut settings, mut pod) = init2(SUBS_DURATION);
-
-    let investment = mint_for_testing(1_000_000, scenario.ctx());
-    let excess = pod.invest(&settings, investment, &clock, scenario.ctx());
-    transfer::public_transfer(excess, @0x0);
-    test_scenario::return_shared(pod);
+    invest1(&mut pod, &settings, 1_000_000, &clock, scenario.ctx());
 
     // Fast forward past grace to vesting start, then claim
     clock.increment_for_testing(GRACE_DURATION + MINUTE);
     scenario.next_tx(investor);
-    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     // Verify pod is now in vesting
     assert!(pod.pod_status(&clock) == pod::status_vesting());
 
@@ -616,24 +593,14 @@ fun test_investor_claim_tokens() {
 #[test]
 fun test_founder_claim_funds() {
     let founder = @0x1;
-    let investor = @0x2;
 
-    let (mut scenario, mut clock, mut settings) = init1(founder);
-
-    // Fast forward to just before subscription ends, then invest
-    clock.increment_for_testing(DAY * 7);
-    scenario.next_tx(investor);
-    accept_latest_tc(&mut settings, &mut scenario);
-    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
-    let investment = mint_for_testing(1_000_000, scenario.ctx());
-    let excess = pod.invest(&settings, investment, &clock, scenario.ctx());
-    transfer::public_transfer(excess, @0x0);
-    test_scenario::return_shared(pod);
+    // Fast forward to just before subscription ends and invest
+    let (mut scenario, mut clock, mut settings, mut pod) = init2(SUBS_DURATION);
+    invest1(&mut pod, &settings, 1_000_000, &clock, scenario.ctx());
 
     // Fast forward past grace period, then claim (time elapsed > 0)
     clock.increment_for_testing(DAY * 3 + MINUTE);
     scenario.next_tx(founder);
-    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     let cap = scenario.take_from_sender<PodAdminCap>();
     let claimed_funds = pod.founder_claim_funds(
         &cap,
@@ -664,9 +631,7 @@ fun test_founder_claim_funds_with_cliff() {
     scenario.next_tx(investor);
     accept_latest_tc(&mut settings, &mut scenario);
     let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
-    let investment = mint_for_testing(1_000_000, scenario.ctx());
-    let excess = pod.invest(&settings, investment, &clock, scenario.ctx());
-    transfer::public_transfer(excess, @0x0);
+    invest1(&mut pod, &settings, 1_000_000, &clock, scenario.ctx());
     test_scenario::return_shared(pod);
 
     // Fast forward past grace to cliff
@@ -696,27 +661,16 @@ fun test_founder_claim_funds_with_cliff() {
 #[test]
 #[expected_failure(abort_code = pod::E_POD_NOT_VESTING)]
 fun test_withdraw_unallocated_tokens() {
-    let founder = @0x1;
     let investor = @0x2;
 
-    let (mut scenario, mut clock, mut settings) = init1(founder);
-
-    // Fast forward and invest
-    clock.increment_for_testing(MINUTE * 2);
-    scenario.next_tx(investor);
-    accept_latest_tc(&mut settings, &mut scenario);
-    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
-    let investment = mint_for_testing(MAX_GOAL, scenario.ctx());
-    let excess = pod.invest(&settings, investment, &clock, scenario.ctx());
-    transfer::public_transfer(excess, @0x0);
-    test_scenario::return_shared(pod);
+    let (mut scenario, mut clock, mut settings, mut pod) = init2(TIME_SUBCRIB);
+    invest1(&mut pod, &settings, MAX_GOAL, &clock, scenario.ctx());
 
     // Fast forward to grace period
     clock.increment_for_testing(GRACE_DURATION / 2);
 
     // Try to claim tokens (should fail)
     scenario.next_tx(investor);
-    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     let _claimed = pod.investor_claim_tokens(&clock, scenario.ctx());
     transfer::public_transfer(_claimed, @0x0);
 
@@ -733,9 +687,7 @@ fun test_grace_period_cannot_claim_funds() {
     clock.increment_for_testing(MINUTE * 2);
     scenario.next_tx(founder);
     settings.accept_tc(1, scenario.ctx());
-    let investment = mint_for_testing<SUI>(800_000, scenario.ctx());
-    let excess = pod.invest(&settings, investment, &clock, scenario.ctx());
-    transfer::public_transfer(excess, @0x0);
+    invest1(&mut pod, &settings, 800_000, &clock, scenario.ctx());
     test_scenario::return_shared(pod);
 
     // Fast forward to grace period
@@ -757,12 +709,9 @@ fun test_grace_period_cannot_claim_funds() {
 // ================================
 
 /// Helper to setup pod for exit tests
-fun helper_test_exit(is_grace: bool): (Scenario, Clock, GlobalSettings) {
+fun helper_test_exit(is_grace: bool): (Scenario, Clock, GlobalSettings, Pod<SUI, SUI>) {
     let (mut scenario, mut clock, mut settings, mut pod) = init2(TIME_SUBCRIB);
-    let investment = mint_for_testing(MAX_GOAL, scenario.ctx());
-    let excess = pod.invest(&settings, investment, &clock, scenario.ctx());
-    transfer::public_transfer(excess, @0x0);
-    test_scenario::return_shared(pod);
+    invest1(&mut pod, &settings, MAX_GOAL, &clock, scenario.ctx());
 
     // Fast forward to grace or after
     if (is_grace) {
@@ -771,7 +720,7 @@ fun helper_test_exit(is_grace: bool): (Scenario, Clock, GlobalSettings) {
         clock.increment_for_testing(GRACE_DURATION + DAY);
     };
 
-    (scenario, clock, settings)
+    (scenario, clock, settings, pod)
 }
 
 #[test]
@@ -779,11 +728,10 @@ fun test_exit_grace_period() {
     // TODO: add scenario with more than one investor
     // scenario1: single investor taking max goal
 
-    let (mut scenario, clock, s) = helper_test_exit(true);
+    let (mut scenario, clock, s, mut pod) = helper_test_exit(true);
 
     // Investor exits during grace
     scenario.next_tx(@0x2);
-    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     assert!(pod.pod_status(&clock) == pod::status_grace());
     let (refund, vested_tokens) = pod.exit_investment(&clock, scenario.ctx());
 
@@ -800,11 +748,10 @@ fun test_exit_grace_period() {
 
 #[test]
 fun test_exit_after_grace_period() {
-    let (mut scenario, clock, settings) = helper_test_exit(false);
+    let (mut scenario, clock, settings, mut pod) = helper_test_exit(false);
 
     // Investor exits after grace fee period
     scenario.next_tx(@0x2);
-    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     let (refund, vested_tokens) = pod.exit_investment(
         &clock,
         scenario.ctx(),
@@ -822,11 +769,10 @@ fun test_exit_after_grace_period() {
 #[test]
 #[expected_failure(abort_code = 1, location = sui::dynamic_field)]
 fun test_exit_grace_period_only_once() {
-    let (mut scenario, clock, s) = helper_test_exit(true);
+    let (mut scenario, clock, s, mut pod) = helper_test_exit(true);
 
     // First exit
     scenario.next_tx(@0x2);
-    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     let (_refund, _vested) = pod.exit_investment(&clock, scenario.ctx());
     transfer::public_transfer(_refund, @0x0);
     transfer::public_transfer(_vested, @0x0);
@@ -845,11 +791,10 @@ fun test_exit_grace_period_only_once() {
 #[test]
 #[expected_failure(abort_code = 1, location = sui::dynamic_field)]
 fun test_exit_after_grace_period_only_once() {
-    let (mut scenario, clock, settings) = helper_test_exit(false);
+    let (mut scenario, clock, settings, mut pod) = helper_test_exit(false);
 
     // First exit
     scenario.next_tx(@0x2);
-    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     let (_refund, _vested) = pod.exit_investment(&clock, scenario.ctx());
     transfer::public_transfer(_refund, @0x0);
     transfer::public_transfer(_vested, @0x0);
@@ -873,18 +818,13 @@ fun test_exit_after_grace_period_only_once() {
 fun test_failed_pod_refund() {
     let investor = @0x2;
     let (mut scenario, mut clock, mut settings, mut pod) = init2(TIME_SUBCRIB);
-
-    let investment = mint_for_testing(500_000, scenario.ctx());
-    let excess = pod.invest(&settings, investment, &clock, scenario.ctx());
-    transfer::public_transfer(excess, @0x0);
-    test_scenario::return_shared(pod);
+    invest1(&mut pod, &settings, 500_000, &clock, scenario.ctx());
 
     // Fast forward past subscription end
-    clock.increment_for_testing(DAY * 7 + HOUR);
+    clock.increment_for_testing(SUBS_DURATION + HOUR);
 
     // Investor gets full refund
     scenario.next_tx(investor);
-    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     let refund = pod.failed_pod_refund(&clock, scenario.ctx());
     assert_u64_eq(refund.value(), 500_000);
     transfer::public_transfer(refund, @0x0);
@@ -896,18 +836,13 @@ fun test_failed_pod_refund() {
 fun test_failed_pod_withdraw_tokens() {
     let founder = @0x1;
     let (mut scenario, mut clock, mut settings, mut pod) = init2(TIME_SUBCRIB);
-
-    let investment = mint_for_testing(500_000, scenario.ctx());
-    let excess = pod.invest(&settings, investment, &clock, scenario.ctx());
-    transfer::public_transfer(excess, @0x0);
-    test_scenario::return_shared(pod);
+    invest1(&mut pod, &settings, 500_000, &clock, scenario.ctx());
 
     // Fast forward to failure
     clock.increment_for_testing(DAY * 7 + HOUR);
 
     // Founder withdraws all tokens
     scenario.next_tx(founder);
-    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     let cap = scenario.take_from_sender<PodAdminCap>();
     let withdrawn = pod.failed_pod_withdraw(&cap, &clock, scenario.ctx());
     assert_u64_eq(withdrawn.value(), (MAX_GOAL * PRICE_MULTIPLIER) / TOKEN_PRICE);
@@ -925,10 +860,7 @@ fun test_failed_pod_withdraw_tokens() {
 #[expected_failure(abort_code = pod::E_ZERO_INVESTMENT)]
 fun test_zero_investment() {
     let (mut scenario, mut clock, mut settings, mut pod) = init2(TIME_SUBCRIB);
-
-    let investment = mint_for_testing<SUI>(0, scenario.ctx());
-    let _excess = pod.invest(&settings, investment, &clock, scenario.ctx());
-    transfer::public_transfer(_excess, @0x0);
+    invest1(&mut pod, &settings, 0, &clock, scenario.ctx());
 
     cleanup(clock, pod, settings, scenario);
 }
@@ -967,15 +899,11 @@ fun test_pod_status_transitions() {
 fun test_grace_and_vesting_status() {
     let founder = @0x1;
     let (mut scenario, mut clock, mut settings, mut pod) = init2(TIME_SUBCRIB);
-    let investment = mint_for_testing<SUI>(800_000, scenario.ctx());
-    let excess = pod.invest(&settings, investment, &clock, scenario.ctx());
-    transfer::public_transfer(excess, @0x0);
-    test_scenario::return_shared(pod);
+    invest1(&mut pod, &settings, 800_000, &clock, scenario.ctx());
 
     // Fast forward to grace period
     clock.increment_for_testing(DAY * 7);
     scenario.next_tx(founder);
-    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     assert_u8_eq(pod.pod_status(&clock), 3); // GRACE
     test_scenario::return_shared(pod);
 
@@ -1012,25 +940,18 @@ fun test_full_pod_lifecycle_success() {
     let investor3 = @0x4;
 
     let (mut scenario, mut clock, mut settings, mut pod) = init2(TIME_SUBCRIB);
-
-    let inv1_investment = mint_for_testing(300_000, scenario.ctx());
-    let excess1 = pod.invest(&settings, inv1_investment, &clock, scenario.ctx());
-    transfer::public_transfer(excess1, @0x0);
-    test_scenario::return_shared(pod);
+    invest1(&mut pod, &settings, 300_000, &clock, scenario.ctx());
 
     scenario.next_tx(investor2);
     accept_latest_tc(&mut settings, &mut scenario);
-    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
-    let inv2_investment = mint_for_testing(250_000, scenario.ctx());
-    let excess2 = pod.invest(&settings, inv2_investment, &clock, scenario.ctx());
-    transfer::public_transfer(excess2, @0x0);
-    test_scenario::return_shared(pod);
+    invest1(&mut pod, &settings, 250_000, &clock, scenario.ctx());
 
     scenario.next_tx(investor3);
     accept_latest_tc(&mut settings, &mut scenario);
-    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
+
     let inv3_investment = mint_for_testing(500_000, scenario.ctx());
     let excess3 = pod.invest(&settings, inv3_investment, &clock, scenario.ctx());
+    assert_u64_eq(excess3.value(), 50_000);
     transfer::public_transfer(excess3, @0x0);
     test_scenario::return_shared(pod);
 
@@ -1090,20 +1011,16 @@ fun test_full_pod_lifecycle_failure() {
 
     // 2. Fast forward and invest (but not enough to reach min)
     let (mut scenario, mut clock, mut settings, mut pod) = init2(TIME_SUBCRIB);
-    let investment = mint_for_testing(500_000, scenario.ctx());
-    let excess = pod.invest(&settings, investment, &clock, scenario.ctx());
-    transfer::public_transfer(excess, @0x0);
-    test_scenario::return_shared(pod);
+    invest1(&mut pod, &settings, 500_000, &clock, scenario.ctx());
 
     // 3. One investor cancels subscription
     scenario.next_tx(investor);
-    let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     let refund = pod.cancel_subscription(
         &settings,
         &clock,
         scenario.ctx(),
     );
-    assert!(refund.value() > 0);
+    assert!(refund.value() > 490_000);
     transfer::public_transfer(refund, @0x0);
     test_scenario::return_shared(pod);
 
@@ -1134,3 +1051,6 @@ fun test_full_pod_lifecycle_failure() {
     test_scenario::return_to_sender(&scenario, cap);
     cleanup(clock, pod, settings, scenario);
 }
+
+// TODO add tests for
+// + tc_accept
