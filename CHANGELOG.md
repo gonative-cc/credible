@@ -11,6 +11,16 @@
 - User can only invest if he accepted the latest T&C.
 - `invest` function now takes the Global Settings as a required argument (in the second place).
 
+Move tc_version and accepted_tc from GlobalSettings to a new struct: UserStore:
+```
+struct UserStore has key {
+    id: UID,
+    tc_version: u16,
+    accepted_tc: Table<address, u16>,
+}
+```
+
+
 ## v0.2.0 (2025-12-12)
 
 ### Features

@@ -64,10 +64,15 @@ fun init(ctx: &mut TxContext) {
         treasury: tx_context::sender(ctx),
         min_cliff_duration: 0, // Cliff duration can be 0 (disabled)
         max_cliff_duration: day * 365 * 2, // 2 years max cliff
+    };
+    transfer::share_object(settings);
+
+    let user_store = UserStore {
+        id: object::new(ctx),
         tc_version: 1, // Initial T&C version
         accepted_tc: table::new(ctx),
     };
-    transfer::share_object(settings);
+    transfer::share_object(user_store);
 
     let admin_cap = PlatformAdminCap { id: object::new(ctx) };
     transfer::public_transfer(admin_cap, tx_context::sender(ctx));
@@ -148,13 +153,18 @@ public struct GlobalSettings has key {
     treasury: address,
     min_cliff_duration: u64,
     max_cliff_duration: u64,
+}
+
+/// Shared object for storing user-related data.
+public struct UserStore has key {
+    id: UID,
     tc_version: u16,
     accepted_tc: Table<address, u16>,
 }
 
 public fun get_global_settings(
     settings: &GlobalSettings,
-): (u64, u64, u64, u64, u64, u64, u64, u64, u64, address, u64, u64, u16) {
+): (u64, u64, u64, u64, u64, u64, u64, u64, u64, address, u64, u64) {
     (
         settings.max_immediate_unlock_pm,
         settings.min_vesting_duration,
@@ -168,7 +178,6 @@ public fun get_global_settings(
         settings.treasury,
         settings.min_cliff_duration,
         settings.max_cliff_duration,
-        settings.tc_version,
     )
 }
 
@@ -236,32 +245,32 @@ public fun update_settings(
     emit(EventSettingsUpdated {});
 }
 
-public fun update_tc(settings: &mut GlobalSettings, _: &PlatformAdminCap, version: u16) {
-    assert!(version == settings.tc_version + 1, E_INVALID_TC_VERSION);
-    settings.tc_version = version;
+public fun update_tc(user_store: &mut UserStore, _: &PlatformAdminCap, version: u16) {
+    assert!(version == user_store.tc_version + 1, E_INVALID_TC_VERSION);
+    user_store.tc_version = version;
 }
 
-public fun accept_tc(settings: &mut GlobalSettings, version: u16, ctx: &mut TxContext) {
-    assert!(version == settings.tc_version, E_INVALID_TC_VERSION);
+public fun accept_tc(user_store: &mut UserStore, version: u16, ctx: &mut TxContext) {
+    assert!(version == user_store.tc_version, E_INVALID_TC_VERSION);
     let user = tx_context::sender(ctx);
-    if (settings.accepted_tc.contains(user)) {
-        let v = &mut settings.accepted_tc[user];
+    if (user_store.accepted_tc.contains(user)) {
+        let v = &mut user_store.accepted_tc[user];
         *v = version;
     } else {
-        settings.accepted_tc.add(user, version);
+        user_store.accepted_tc.add(user, version);
     };
     emit(EventTcAccepted { user, version });
 }
 
-public fun tc_version(settings: &GlobalSettings): u16 {
-    settings.tc_version
+public fun tc_version(user_store: &UserStore): u16 {
+    user_store.tc_version
 }
 
-public fun accepted_tc_version(settings: &GlobalSettings, user: address): Option<u16> {
-    if (!settings.accepted_tc.contains(user)) {
+public fun accepted_tc_version(user_store: &UserStore, user: address): Option<u16> {
+    if (!user_store.accepted_tc.contains(user)) {
         return option::none()
     };
-    option::some(settings.accepted_tc[user])
+    option::some(user_store.accepted_tc[user])
 }
 
 //
@@ -497,7 +506,7 @@ public fun investor_record<C, T>(pod: &Pod<C, T>, investor: address): Option<Inv
 
 public fun invest<C, T>(
     pod: &mut Pod<C, T>,
-    settings: &GlobalSettings,
+    user_store: &UserStore,
     mut investment: Coin<C>,
     clock: &Clock,
     ctx: &mut TxContext,
@@ -508,12 +517,12 @@ public fun invest<C, T>(
     let investment_amount = investment.value();
     assert!(investment_amount > 0, E_ZERO_INVESTMENT);
     let investor = ctx.sender();
-    let accepted_version = if (settings.accepted_tc.contains(investor)) {
-        settings.accepted_tc[investor]
+    let accepted_version = if (user_store.accepted_tc.contains(investor)) {
+        user_store.accepted_tc[investor]
     } else {
         0
     };
-    assert!(accepted_version >= settings.tc_version, E_TC_NOT_ACCEPTED);
+    assert!(accepted_version >= user_store.tc_version, E_TC_NOT_ACCEPTED);
     let new_total_raised = pod.total_raised + investment_amount;
 
     let (actual_investment, excess_coin) = if (new_total_raised > pod.params.max_goal) {
