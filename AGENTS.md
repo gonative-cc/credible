@@ -85,6 +85,11 @@ The entire platform is implemented in a single Move modules (.move files): produ
 - **Capability-Based Security**: Admin caps control privileged operations
 - **Time-Based State**: Uses `Clock` for timestamp-based logic
 
+
+## Coding conventions
+
+Use method call style. When a module `m` declares function `f` that takes object `o` that is in that module, then instead writing `m::f(o)` use method call style: `o.f()` everywhere (also in other modules that import object `o`).
+
 ## Development Commands
 
 ```sh
