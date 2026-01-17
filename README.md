@@ -183,6 +183,21 @@ At the end: she got 45 USDC back and received 5500 X tokens.
 | `min_cliff_duration`        | 0         | Minimum cliff duration for a Pod                                                                               |
 | `max_cliff_duration`        | 2 years   | Maximum cliff duration for a Pod                                                                               |
 
+### Terms & Conditions
+
+All users must accept the platform's terms and conditions before participating in any investment. The platform tracks T&C acceptance per user address.
+
+- **Current T&C Version**: Maintained in GlobalSettings (`tc_version`), starts at 1
+- **Acceptance Tracking**: The platform tracks each user's accepted T&C version in `accepted_tc` table
+- **Platform Admin Functions**:
+  - `update_tc(settings, version)`: Increments the T&C version. Must be `version == tc_version + 1`
+- **User Functions**:
+  - `accept_tc(settings, version)`: Accepts the current T&C version. Must match the latest `tc_version`
+- **Investment Requirement**: Users can only invest if they have accepted the latest T&C version
+
+The T&C version can be bumped by platform administrators when terms change, requiring all users to re-accept before investing. This ensures all users are bound by the current platform terms.
+| `tc_version` | 1 | Current terms and conditions version |
+
 ### Phase 1: Pod Creation
 
 Founders create a `Pod` and:

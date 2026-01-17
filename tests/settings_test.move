@@ -1,7 +1,7 @@
 module beelievers_kickstarter::settings_tests;
 
 use beelievers_kickstarter::pod::{Self, GlobalSettings, PlatformAdminCap};
-use sui::test_scenario::{Self, next_tx, ctx};
+use sui::test_scenario::{Self, Scenario, next_tx, ctx};
 
 const DAY: u64 = HOUR * 24;
 const HOUR: u64 = MINUTE * 60;
@@ -16,18 +16,28 @@ fun assert_u64_eq(a: u64, b: u64) {
 // Platform Initialization Tests
 // ================================
 
-#[test]
-fun test_platform_initialization() {
+fun init1(): (address, Scenario, GlobalSettings) {
     let owner = @0x1;
     let mut scenario = test_scenario::begin(owner);
-    let ctx = ctx(&mut scenario);
 
-    // Initialize module
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, owner);
+    pod::init_for_tests(scenario.ctx());
+    scenario.next_tx(owner);
+    let settings = scenario.take_shared<GlobalSettings>();
+
+    (owner, scenario, settings)
+}
+
+fun cleanup(cap: PlatformAdminCap, settings: GlobalSettings, scenario: Scenario) {
+    scenario.return_to_sender(cap);
+    test_scenario::return_shared(settings);
+    scenario.end();
+}
+
+#[test]
+fun test_platform_initialization() {
+    let (_owner, scenario, settings) = init1();
 
     // Verify GlobalSettings was created with correct defaults
-    let settings = scenario.take_shared<GlobalSettings>();
     let (
         max_immediate_unlock_pm,
         min_vesting_duration,
@@ -41,6 +51,7 @@ fun test_platform_initialization() {
         treasury,
         min_cliff_duration,
         max_cliff_duration,
+        tc_version,
     ) = pod::get_global_settings(&settings);
 
     assert_u64_eq(max_immediate_unlock_pm, 100); // 10.0%
@@ -55,13 +66,12 @@ fun test_platform_initialization() {
     assert!(treasury == @0x1); // owner
     assert_u64_eq(min_cliff_duration, 0);
     assert_u64_eq(max_cliff_duration, DAY * 365 * 2);
-    test_scenario::return_shared(settings);
+    assert!(tc_version == 1);
 
     // Verify PlatformAdminCap was created
     let admin_cap = scenario.take_from_sender<PlatformAdminCap>();
-    test_scenario::return_to_sender(&scenario, admin_cap);
 
-    test_scenario::end(scenario);
+    cleanup(admin_cap, settings, scenario);
 }
 
 // ================================
@@ -70,21 +80,11 @@ fun test_platform_initialization() {
 
 #[test]
 fun test_update_all_settings() {
-    let owner = @0x1;
-    let mut scenario = test_scenario::begin(owner);
-    let ctx = ctx(&mut scenario);
-
-    // Initialize
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, owner);
-
-    let mut settings = scenario.take_shared<GlobalSettings>();
+    let (_owner, mut scenario, mut settings) = init1();
     let cap = scenario.take_from_sender<PlatformAdminCap>();
 
-    // Update all settings
-    pod::update_settings(
+    settings.update_settings(
         &cap,
-        &mut settings,
         option::some(100), // 10%
         option::some(DAY * 60), // 2 months min
         option::some(DAY * 365 * 2), // 2 years max
@@ -114,8 +114,8 @@ fun test_update_all_settings() {
         treasury,
         min_cliff_duration,
         max_cliff_duration,
+        _tc_version,
     ) = pod::get_global_settings(&settings);
-
     assert_u64_eq(max_immediate_unlock_pm, 100);
     assert_u64_eq(min_vesting_duration, DAY * 60);
     assert_u64_eq(max_vesting_duration, DAY * 365 * 2);
@@ -129,27 +129,17 @@ fun test_update_all_settings() {
     assert_u64_eq(min_cliff_duration, DAY * 30);
     assert_u64_eq(max_cliff_duration, DAY * 365 * 3);
 
-    test_scenario::return_to_sender(&scenario, cap);
-    test_scenario::return_shared(settings);
-    test_scenario::end(scenario);
+    cleanup(cap, settings, scenario);
 }
 
 #[test]
 fun test_update_individual_settings() {
-    let owner = @0x1;
-    let mut scenario = test_scenario::begin(owner);
-    let ctx = ctx(&mut scenario);
-
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, owner);
-
-    let mut settings = scenario.take_shared<GlobalSettings>();
+    let (_owner, mut scenario, mut settings) = init1();
     let cap = scenario.take_from_sender<PlatformAdminCap>();
 
     // Update only one setting
-    pod::update_settings(
+    settings.update_settings(
         &cap,
-        &mut settings,
         option::some(120),
         option::none(),
         option::none(),
@@ -166,34 +156,23 @@ fun test_update_individual_settings() {
     );
 
     // Verify only max_immediate_unlock changed
-    let (max_immediate_unlock_pm, _, _, _, _, _, _, _, _, _, _, _) = pod::get_global_settings(
+    let (max_immediate_unlock_pm, _, _, _, _, _, _, _, _, _, _, _, _) = pod::get_global_settings(
         &settings,
     );
-
     assert_u64_eq(max_immediate_unlock_pm, 120);
 
-    test_scenario::return_to_sender(&scenario, cap);
-    test_scenario::return_shared(settings);
-    test_scenario::end(scenario);
+    cleanup(cap, settings, scenario);
 }
 
 #[test]
 #[expected_failure(abort_code = pod::E_INVALID_PARAMS)]
 fun test_update_settings_zero_vesting_duration() {
-    let owner = @0x1;
-    let mut scenario = test_scenario::begin(owner);
-    let ctx = ctx(&mut scenario);
-
-    pod::init_for_tests(ctx);
-    next_tx(&mut scenario, owner);
-
-    let mut settings = scenario.take_shared<GlobalSettings>();
+    let (_owner, mut scenario, mut settings) = init1();
     let cap = scenario.take_from_sender<PlatformAdminCap>();
 
     // Try to set vesting duration to 0 (should fail)
-    pod::update_settings(
+    settings.update_settings(
         &cap,
-        &mut settings,
         option::none(),
         option::some(0),
         option::none(),
@@ -209,7 +188,24 @@ fun test_update_settings_zero_vesting_duration() {
         ctx(&mut scenario),
     );
 
-    test_scenario::return_to_sender(&scenario, cap);
-    test_scenario::return_shared(settings);
-    test_scenario::end(scenario);
+    cleanup(cap, settings, scenario);
+}
+
+#[test]
+fun test_settings_update_tc() {
+    let (_owner, scenario, mut settings) = init1();
+    let cap = scenario.take_from_sender<PlatformAdminCap>();
+    settings.update_tc(&cap, 2);
+    let (_, _, _, _, _, _, _, _, _, _, _, _, tc) = pod::get_global_settings(&settings);
+    assert!(tc == 2);
+    cleanup(cap, settings, scenario);
+}
+
+#[test]
+#[expected_failure(abort_code = pod::E_INVALID_TC_VERSION)]
+fun test_settings_update_tc_not_increment() {
+    let (_owner, scenario, mut settings) = init1();
+    let cap = scenario.take_from_sender<PlatformAdminCap>();
+    settings.update_tc(&cap, 3);
+    cleanup(cap, settings, scenario);
 }
