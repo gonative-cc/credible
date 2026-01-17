@@ -65,7 +65,7 @@ fun invest1<C, T>(
 }
 
 /// creates Pod<SUI, SUI>
-fun init1(owner: address): (Scenario, Clock, GlobalSettings, UserStore) {
+fun init1(owner: address): (Scenario, Clock, UserStore) {
     init_t(
         owner,
         REQUIRED_TOKENS,
@@ -82,21 +82,21 @@ fun init1(owner: address): (Scenario, Clock, GlobalSettings, UserStore) {
 }
 
 /// creates pod, accepts tc and moves to subscription start.
-fun init2(time: u64): (Scenario, Clock, GlobalSettings, UserStore, Pod<SUI, SUI>) {
+fun init2(time: u64): (Scenario, Clock, UserStore, Pod<SUI, SUI>) {
     let founder = @0x1;
     let investor = @0x2;
-    let (mut scenario, mut clock, mut settings, mut user_store) = init1(founder);
+    let (mut scenario, mut clock, mut user_store) = init1(founder);
     scenario.next_tx(investor);
     accept_latest_tc(&mut user_store, &mut scenario);
 
     clock.increment_for_testing(time);
     let pod = scenario.take_shared<Pod<SUI, SUI>>();
 
-    (scenario, clock, settings, user_store, pod)
+    (scenario, clock, user_store, pod)
 }
 
 /// creates Pod<SUI, SUI> with cliff
-fun init_cliff(owner: address, cliff_unlock: bool): (Scenario, Clock, GlobalSettings, UserStore) {
+fun init_cliff(owner: address, cliff_unlock: bool): (Scenario, Clock, UserStore) {
     init_t(
         owner,
         REQUIRED_TOKENS,
@@ -125,7 +125,7 @@ fun init_t(
     immediate_unlock_pm: u64,
     cliff_dur: u64,
     cliff_token_immediate_unlock: bool,
-): (Scenario, Clock, GlobalSettings, UserStore) {
+): (Scenario, Clock, UserStore) {
     let mut scenario = test_scenario::begin(owner);
     let mut clock = sui::clock::create_for_testing(scenario.ctx());
 
@@ -162,25 +162,20 @@ fun init_t(
         scenario.ctx(),
     );
 
-    (scenario, clock, settings, user_store)
+    test_scenario::return_shared(settings);
+
+    (scenario, clock, user_store)
 }
 
-fun cleanup1(c: Clock, settings: GlobalSettings, user_store: UserStore, scenario: Scenario) {
-    test_scenario::return_shared(settings);
+fun cleanup1(c: Clock, user_store: UserStore, scenario: Scenario) {
     test_scenario::return_shared(user_store);
     c.destroy_for_testing();
     scenario.end();
 }
 
-fun cleanup<C, T>(
-    c: Clock,
-    pod: Pod<C, T>,
-    settings: GlobalSettings,
-    user_store: UserStore,
-    scenario: Scenario,
-) {
+fun cleanup<C, T>(c: Clock, pod: Pod<C, T>, user_store: UserStore, scenario: Scenario) {
     test_scenario::return_shared(pod);
-    cleanup1(c, settings, user_store, scenario);
+    cleanup1(c, user_store, scenario);
 }
 
 // ================================
@@ -190,7 +185,7 @@ fun cleanup<C, T>(
 #[test]
 fun test_create_pod_success() {
     let owner = @0x1;
-    let (mut scenario, clock, mut settings, user_store) = init1(owner);
+    let (mut scenario, clock, user_store) = init1(owner);
 
     // Start new transaction to access created pod
     scenario.next_tx(owner);
@@ -208,13 +203,13 @@ fun test_create_pod_success() {
     assert_u64_eq(params.get_pod_immediate_unlock_pm(), IMMEDIATE_UNLOCK_PM);
 
     test_scenario::return_to_sender(&scenario, cap);
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
 #[expected_failure(abort_code = pod::E_INVALID_PARAMS)]
 fun test_create_pod_invalid_min_goal() {
-    let (mut scenario, c, mut settings, user_store) = init_t(
+    let (mut scenario, c, user_store) = init_t(
         @0x1,
         REQUIRED_TOKENS,
         TOKEN_PRICE,
@@ -227,13 +222,13 @@ fun test_create_pod_invalid_min_goal() {
         0,
         false,
     );
-    cleanup1(c, settings, user_store, scenario);
+    cleanup1(c, user_store, scenario);
 }
 
 #[test]
 #[expected_failure(abort_code = pod::E_INVALID_PARAMS)]
 fun test_create_pod_max_less_than_min() {
-    let (mut scenario, c, mut settings, user_store) = init_t(
+    let (mut scenario, c, user_store) = init_t(
         @0x1,
         REQUIRED_TOKENS,
         TOKEN_PRICE,
@@ -246,13 +241,13 @@ fun test_create_pod_max_less_than_min() {
         0,
         false,
     );
-    cleanup1(c, settings, user_store, scenario);
+    cleanup1(c, user_store, scenario);
 }
 
 #[test]
 #[expected_failure(abort_code = pod::E_INVALID_PARAMS)]
 fun test_create_pod_subscription_duration_too_short() {
-    let (mut scenario, c, mut settings, user_store) = init_t(
+    let (mut scenario, c, user_store) = init_t(
         @0x1,
         REQUIRED_TOKENS,
         TOKEN_PRICE,
@@ -265,13 +260,13 @@ fun test_create_pod_subscription_duration_too_short() {
         0,
         false,
     );
-    cleanup1(c, settings, user_store, scenario);
+    cleanup1(c, user_store, scenario);
 }
 
 #[test]
 #[expected_failure(abort_code = pod::E_INVALID_PARAMS)]
 fun test_create_pod_subscription_duration_too_long() {
-    let (mut scenario, c, mut settings, user_store) = init_t(
+    let (mut scenario, c, user_store) = init_t(
         @0x1,
         REQUIRED_TOKENS,
         TOKEN_PRICE,
@@ -284,13 +279,13 @@ fun test_create_pod_subscription_duration_too_long() {
         0,
         false,
     );
-    cleanup1(c, settings, user_store, scenario);
+    cleanup1(c, user_store, scenario);
 }
 
 #[test]
 #[expected_failure(abort_code = pod::E_INVALID_PARAMS)]
 fun test_create_pod_vesting_duration_too_short() {
-    let (mut scenario, c, mut settings, user_store) = init_t(
+    let (mut scenario, c, user_store) = init_t(
         @0x1,
         REQUIRED_TOKENS,
         TOKEN_PRICE,
@@ -303,13 +298,13 @@ fun test_create_pod_vesting_duration_too_short() {
         0,
         false,
     );
-    cleanup1(c, settings, user_store, scenario);
+    cleanup1(c, user_store, scenario);
 }
 
 #[test]
 #[expected_failure(abort_code = pod::E_INVALID_PARAMS)]
 fun test_create_pod_vesting_duration_too_long() {
-    let (mut scenario, c, mut settings, user_store) = init_t(
+    let (mut scenario, c, user_store) = init_t(
         @0x1,
         REQUIRED_TOKENS,
         TOKEN_PRICE,
@@ -322,13 +317,13 @@ fun test_create_pod_vesting_duration_too_long() {
         0,
         false,
     );
-    cleanup1(c, settings, user_store, scenario);
+    cleanup1(c, user_store, scenario);
 }
 
 #[test]
 #[expected_failure(abort_code = pod::E_INVALID_PARAMS)]
 fun test_create_pod_immediate_unlock_too_high() {
-    let (mut scenario, c, mut settings, user_store) = init_t(
+    let (mut scenario, c, user_store) = init_t(
         @0x1,
         REQUIRED_TOKENS,
         TOKEN_PRICE,
@@ -341,13 +336,13 @@ fun test_create_pod_immediate_unlock_too_high() {
         0,
         false,
     );
-    cleanup1(c, settings, user_store, scenario);
+    cleanup1(c, user_store, scenario);
 }
 
 #[test]
 #[expected_failure(abort_code = pod::E_INVALID_TOKEN_SUPPLY)]
 fun test_create_pod_wrong_token_supply() {
-    let (mut scenario, c, mut settings, user_store) = init_t(
+    let (mut scenario, c, user_store) = init_t(
         @0x1,
         REQUIRED_TOKENS / 2, // Provide less tokens (should fail)
         TOKEN_PRICE,
@@ -360,7 +355,7 @@ fun test_create_pod_wrong_token_supply() {
         0,
         false,
     );
-    cleanup1(c, settings, user_store, scenario);
+    cleanup1(c, user_store, scenario);
 }
 
 // ================================
@@ -369,7 +364,7 @@ fun test_create_pod_wrong_token_supply() {
 
 #[test]
 fun test_successful_investment() {
-    let (mut scenario, mut clock, mut settings, mut user_store, mut pod) = init2(TIME_SUBCRIB);
+    let (mut scenario, mut clock, mut user_store, mut pod) = init2(TIME_SUBCRIB);
 
     let investment = mint_for_testing(100_000, scenario.ctx());
     let excess = pod.invest(&user_store, investment, &clock, scenario.ctx());
@@ -381,15 +376,15 @@ fun test_successful_investment() {
     // Verify investment was recorded
     assert_u64_eq(pod.pod_total_allocated(), (100_000 * PRICE_MULTIPLIER) / TOKEN_PRICE);
 
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
 #[expected_failure(abort_code = pod::E_POD_NOT_SUBSCRIPTION)]
 fun test_invest_before_subscription() {
-    let (mut scenario, mut clock, mut settings, mut user_store, mut pod) = init2(1);
+    let (mut scenario, mut clock, mut user_store, mut pod) = init2(1);
     invest1(&mut pod, &user_store, 100_000, &clock, scenario.ctx());
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
@@ -397,7 +392,7 @@ fun test_invest_before_subscription() {
 fun test_invest_after_subscription_end() {
     let founder = @0x1;
     let investor = @0x2;
-    let (mut scenario, mut clock, mut settings, mut user_store) = init1(founder);
+    let (mut scenario, mut clock, mut user_store) = init1(founder);
 
     // Fast forward past subscription end
     scenario.next_tx(founder);
@@ -412,16 +407,16 @@ fun test_invest_after_subscription_end() {
     let _excess = pod.invest(&user_store, investment, &clock, scenario.ctx());
     transfer::public_transfer(_excess, @0x0);
 
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
 #[expected_failure(abort_code = pod::E_TC_NOT_ACCEPTED)]
 fun test_invest_not_accepted_tc() {
-    let (mut scenario, mut clock, mut settings, mut user_store, mut pod) = init2(TIME_SUBCRIB);
+    let (mut scenario, mut clock, mut user_store, mut pod) = init2(TIME_SUBCRIB);
     scenario.next_tx(@0x3);
     invest1(&mut pod, &user_store, 100_000, &clock, scenario.ctx());
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
@@ -429,7 +424,7 @@ fun test_invest_not_accepted_tc() {
 fun test_invest_not_accepted_latest_tc() {
     let founder = @0x1;
     let investor = @0x2;
-    let (mut scenario, mut clock, mut settings, mut user_store, mut pod) = init2(TIME_SUBCRIB);
+    let (mut scenario, mut clock, mut user_store, mut pod) = init2(TIME_SUBCRIB);
     scenario.next_tx(founder);
     let cap = scenario.take_from_sender<PlatformAdminCap>();
     user_store.update_tc(&cap, 2);
@@ -438,14 +433,14 @@ fun test_invest_not_accepted_latest_tc() {
     invest1(&mut pod, &user_store, 100_000, &clock, scenario.ctx());
 
     test_scenario::return_to_sender(&scenario, cap);
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
 fun test_invest_accepted_latest_tc() {
     let founder = @0x1;
     let investor = @0x2;
-    let (mut scenario, mut clock, mut settings, mut user_store, mut pod) = init2(TIME_SUBCRIB);
+    let (mut scenario, mut clock, mut user_store, mut pod) = init2(TIME_SUBCRIB);
     scenario.next_tx(founder);
     let cap = scenario.take_from_sender<PlatformAdminCap>();
     user_store.update_tc(&cap, 2);
@@ -455,13 +450,13 @@ fun test_invest_accepted_latest_tc() {
     user_store.accept_tc(2, scenario.ctx());
     invest1(&mut pod, &user_store, 100_000, &clock, scenario.ctx());
 
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
 fun test_max_goal_reached_early() {
     let investor2 = @0x3;
-    let (mut scenario, mut clock, mut settings, mut user_store, mut pod) = init2(TIME_SUBCRIB);
+    let (mut scenario, mut clock, mut user_store, mut pod) = init2(TIME_SUBCRIB);
 
     let investment1 = mint_for_testing(900_000, scenario.ctx());
     let excess1 = pod.invest(&user_store, investment1, &clock, scenario.ctx());
@@ -481,14 +476,14 @@ fun test_max_goal_reached_early() {
     assert_u64_eq(params.get_pod_subscription_end(), clock.timestamp_ms());
     transfer::public_transfer(excess2, @0x0);
 
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
 #[expected_failure(abort_code = pod::E_POD_NOT_SUBSCRIPTION)]
 fun test_invest_after_max_goal() {
     let investor2 = @0x3;
-    let (mut scenario, mut clock, mut settings, mut user_store, mut pod) = init2(TIME_SUBCRIB);
+    let (mut scenario, mut clock, mut user_store, mut pod) = init2(TIME_SUBCRIB);
 
     // First investment reaches max
     invest1(&mut pod, &user_store, 1_000_000, &clock, scenario.ctx());
@@ -498,13 +493,13 @@ fun test_invest_after_max_goal() {
     accept_latest_tc(&mut user_store, &mut scenario);
     invest1(&mut pod, &user_store, 100_000, &clock, scenario.ctx());
 
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
 fun test_multiple_investments_same_investor() {
     let investor = @0x2;
-    let (mut scenario, mut clock, mut settings, mut user_store, mut pod) = init2(TIME_SUBCRIB);
+    let (mut scenario, mut clock, mut user_store, mut pod) = init2(TIME_SUBCRIB);
 
     // First investment
     invest1(&mut pod, &user_store, 100_000, &clock, scenario.ctx());
@@ -515,16 +510,17 @@ fun test_multiple_investments_same_investor() {
     // Total should be combined
     assert_u64_eq(pod.get_pod_total_raised(), 150_000);
 
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
 fun test_cancel_subscription() {
-    let (mut scenario, mut clock, mut settings, mut user_store, mut pod) = init2(TIME_SUBCRIB);
+    let (mut scenario, mut clock, mut user_store, mut pod) = init2(TIME_SUBCRIB);
 
     invest1(&mut pod, &user_store, 100_000, &clock, scenario.ctx());
 
     // Cancel subscription
+    let mut settings = scenario.take_shared<GlobalSettings>();
     let refund = pod.cancel_subscription(
         &settings,
         &clock,
@@ -536,21 +532,23 @@ fun test_cancel_subscription() {
     let expected_refund = 100_000 - kept;
     assert_u64_eq(refund.value(), expected_refund);
     transfer::public_transfer(refund, @0x0);
+    test_scenario::return_shared(settings);
 
     // Total raised should be reduced
     assert_u64_eq(pod.get_pod_total_raised(), kept);
 
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
 #[expected_failure(abort_code = pod::E_INVESTMENT_CANCELLED)]
 fun test_cancel_subscription_only_once() {
     let investor = @0x2;
-    let (mut scenario, mut clock, mut settings, mut user_store, mut pod) = init2(TIME_SUBCRIB);
+    let (mut scenario, mut clock, mut user_store, mut pod) = init2(TIME_SUBCRIB);
 
     // Investor invests and cancels
     invest1(&mut pod, &user_store, 100_000, &clock, scenario.ctx());
+    let mut settings = scenario.take_shared<GlobalSettings>();
     let refund = pod.cancel_subscription(
         &settings,
         &clock,
@@ -566,8 +564,9 @@ fun test_cancel_subscription_only_once() {
         scenario.ctx(),
     );
     transfer::public_transfer(_refund2, @0x0);
+    test_scenario::return_shared(settings);
 
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 // ================================
@@ -616,7 +615,7 @@ fun test_calculate_vested_tokens() {
 fun test_investor_claim_tokens() {
     let investor = @0x2;
     // Fast forward to just before subscription ends, then invest
-    let (mut scenario, mut clock, mut settings, mut user_store, mut pod) = init2(SUBS_DURATION);
+    let (mut scenario, mut clock, mut user_store, mut pod) = init2(SUBS_DURATION);
     invest1(&mut pod, &user_store, 1_000_000, &clock, scenario.ctx());
 
     // Fast forward past grace to vesting start, then claim
@@ -639,7 +638,7 @@ fun test_investor_claim_tokens() {
     // second claim after 1 day
     // another claim at the end of the vesting
 
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
@@ -647,7 +646,7 @@ fun test_founder_claim_funds() {
     let founder = @0x1;
 
     // Fast forward to just before subscription ends and invest
-    let (mut scenario, mut clock, mut settings, mut user_store, mut pod) = init2(SUBS_DURATION);
+    let (mut scenario, mut clock, mut user_store, mut pod) = init2(SUBS_DURATION);
     invest1(&mut pod, &user_store, 1_000_000, &clock, scenario.ctx());
 
     // Fast forward past grace period, then claim (time elapsed > 0)
@@ -668,7 +667,7 @@ fun test_founder_claim_funds() {
     transfer::public_transfer(claimed_funds, @0x0);
 
     test_scenario::return_to_sender(&scenario, cap);
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
@@ -676,7 +675,7 @@ fun test_founder_claim_funds_with_cliff() {
     let founder = @0x1;
     let investor = @0x2;
 
-    let (mut scenario, mut clock, mut settings, mut user_store) = init_cliff(founder, true);
+    let (mut scenario, mut clock, mut user_store) = init_cliff(founder, true);
 
     // Fast forward to just before subscription ends, then invest
     clock.increment_for_testing(DAY * 7);
@@ -707,7 +706,7 @@ fun test_founder_claim_funds_with_cliff() {
     transfer::public_transfer(claimed_funds, @0x0);
 
     test_scenario::return_to_sender(&scenario, cap);
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
@@ -715,7 +714,7 @@ fun test_founder_claim_funds_with_cliff() {
 fun test_withdraw_unallocated_tokens() {
     let investor = @0x2;
 
-    let (mut scenario, mut clock, mut settings, mut user_store, mut pod) = init2(TIME_SUBCRIB);
+    let (mut scenario, mut clock, mut user_store, mut pod) = init2(TIME_SUBCRIB);
     invest1(&mut pod, &user_store, MAX_GOAL, &clock, scenario.ctx());
 
     // Fast forward to grace period
@@ -726,14 +725,14 @@ fun test_withdraw_unallocated_tokens() {
     let _claimed = pod.investor_claim_tokens(&clock, scenario.ctx());
     transfer::public_transfer(_claimed, @0x0);
 
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
 #[expected_failure(abort_code = pod::E_POD_NOT_VESTING)]
 fun test_grace_period_cannot_claim_funds() {
     let founder = @0x1;
-    let (mut scenario, mut clock, mut settings, mut user_store, mut pod) = init2(TIME_SUBCRIB);
+    let (mut scenario, mut clock, mut user_store, mut pod) = init2(TIME_SUBCRIB);
 
     // move time a bit more and use founder to do self investment
     clock.increment_for_testing(MINUTE * 2);
@@ -753,7 +752,7 @@ fun test_grace_period_cannot_claim_funds() {
     transfer::public_transfer(_claimed, @0x0);
 
     test_scenario::return_to_sender(&scenario, cap);
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 // ================================
@@ -761,8 +760,8 @@ fun test_grace_period_cannot_claim_funds() {
 // ================================
 
 /// Helper to setup pod for exit tests
-fun helper_test_exit(is_grace: bool): (Scenario, Clock, GlobalSettings, UserStore, Pod<SUI, SUI>) {
-    let (mut scenario, mut clock, mut settings, mut user_store, mut pod) = init2(TIME_SUBCRIB);
+fun helper_test_exit(is_grace: bool): (Scenario, Clock, UserStore, Pod<SUI, SUI>) {
+    let (mut scenario, mut clock, mut user_store, mut pod) = init2(TIME_SUBCRIB);
     invest1(&mut pod, &user_store, MAX_GOAL, &clock, scenario.ctx());
 
     // Fast forward to grace or after
@@ -772,7 +771,7 @@ fun helper_test_exit(is_grace: bool): (Scenario, Clock, GlobalSettings, UserStor
         clock.increment_for_testing(GRACE_DURATION + DAY);
     };
 
-    (scenario, clock, settings, user_store, pod)
+    (scenario, clock, user_store, pod)
 }
 
 #[test]
@@ -780,14 +779,14 @@ fun test_exit_grace_period() {
     // TODO: add scenario with more than one investor
     // scenario1: single investor taking max goal
 
-    let (mut scenario, clock, s, user_store, mut pod) = helper_test_exit(true);
+    let (mut scenario, clock, user_store, mut pod) = helper_test_exit(true);
 
     // Investor exits during grace
     scenario.next_tx(@0x2);
     assert!(pod.pod_status(&clock) == pod::status_grace());
     let (refund, vested_tokens) = pod.exit_investment(&clock, scenario.ctx());
 
-    let fee = s.get_grace_fee_pm();
+    let fee = pod.get_pod_params().get_pod_grace_fee_pm();
     let expected_refund = 1_000_000 - ratio_ext_pm(1_000_000, fee);
     assert_u64_eq(refund.value(), expected_refund);
     assert_u64_eq(vested_tokens.value(), ratio_ext_pm(REQUIRED_TOKENS, fee));
@@ -795,12 +794,12 @@ fun test_exit_grace_period() {
     transfer::public_transfer(refund, @0x0);
     transfer::public_transfer(vested_tokens, @0x0);
 
-    cleanup(clock, pod, s, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
 fun test_exit_after_grace_period() {
-    let (mut scenario, clock, settings, user_store, mut pod) = helper_test_exit(false);
+    let (mut scenario, clock, user_store, mut pod) = helper_test_exit(false);
 
     // Investor exits after grace fee period
     scenario.next_tx(@0x2);
@@ -815,13 +814,13 @@ fun test_exit_after_grace_period() {
     transfer::public_transfer(refund, @0x0);
     transfer::public_transfer(vested_tokens, @0x0);
 
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
 #[expected_failure(abort_code = 1, location = sui::dynamic_field)]
 fun test_exit_grace_period_only_once() {
-    let (mut scenario, clock, s, user_store, mut pod) = helper_test_exit(true);
+    let (mut scenario, clock, user_store, mut pod) = helper_test_exit(true);
 
     // First exit
     scenario.next_tx(@0x2);
@@ -837,13 +836,13 @@ fun test_exit_grace_period_only_once() {
     transfer::public_transfer(_refund2, @0x0);
     transfer::public_transfer(_vested2, @0x0);
 
-    cleanup(clock, pod, s, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
 #[expected_failure(abort_code = 1, location = sui::dynamic_field)]
 fun test_exit_after_grace_period_only_once() {
-    let (mut scenario, clock, settings, user_store, mut pod) = helper_test_exit(false);
+    let (mut scenario, clock, user_store, mut pod) = helper_test_exit(false);
 
     // First exit
     scenario.next_tx(@0x2);
@@ -859,7 +858,7 @@ fun test_exit_after_grace_period_only_once() {
     transfer::public_transfer(_refund2, @0x0);
     transfer::public_transfer(_vested2, @0x0);
 
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 // ================================
@@ -869,7 +868,7 @@ fun test_exit_after_grace_period_only_once() {
 #[test]
 fun test_failed_pod_refund() {
     let investor = @0x2;
-    let (mut scenario, mut clock, mut settings, mut user_store, mut pod) = init2(TIME_SUBCRIB);
+    let (mut scenario, mut clock, mut user_store, mut pod) = init2(TIME_SUBCRIB);
     invest1(&mut pod, &user_store, 500_000, &clock, scenario.ctx());
 
     // Fast forward past subscription end
@@ -881,13 +880,13 @@ fun test_failed_pod_refund() {
     assert_u64_eq(refund.value(), 500_000);
     transfer::public_transfer(refund, @0x0);
 
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
 fun test_failed_pod_withdraw_tokens() {
     let founder = @0x1;
-    let (mut scenario, mut clock, mut settings, mut user_store, mut pod) = init2(TIME_SUBCRIB);
+    let (mut scenario, mut clock, mut user_store, mut pod) = init2(TIME_SUBCRIB);
     invest1(&mut pod, &user_store, 500_000, &clock, scenario.ctx());
 
     // Fast forward to failure
@@ -901,7 +900,7 @@ fun test_failed_pod_withdraw_tokens() {
     transfer::public_transfer(withdrawn, @0x0);
 
     test_scenario::return_to_sender(&scenario, cap);
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 // ================================
@@ -911,17 +910,17 @@ fun test_failed_pod_withdraw_tokens() {
 #[test]
 #[expected_failure(abort_code = pod::E_ZERO_INVESTMENT)]
 fun test_zero_investment() {
-    let (mut scenario, mut clock, mut settings, mut user_store, mut pod) = init2(TIME_SUBCRIB);
+    let (mut scenario, mut clock, mut user_store, mut pod) = init2(TIME_SUBCRIB);
     invest1(&mut pod, &user_store, 0, &clock, scenario.ctx());
 
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
 fun test_pod_status_transitions() {
     let founder = @0x1;
 
-    let (mut scenario, mut clock, mut settings, user_store) = init1(founder);
+    let (mut scenario, mut clock, user_store) = init1(founder);
 
     // Start new transaction to access created pod
     scenario.next_tx(founder);
@@ -944,13 +943,13 @@ fun test_pod_status_transitions() {
     let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     assert_u8_eq(pod.pod_status(&clock), 2);
 
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
 fun test_grace_and_vesting_status() {
     let founder = @0x1;
-    let (mut scenario, mut clock, mut settings, mut user_store, mut pod) = init2(TIME_SUBCRIB);
+    let (mut scenario, mut clock, mut user_store, mut pod) = init2(TIME_SUBCRIB);
     invest1(&mut pod, &user_store, 800_000, &clock, scenario.ctx());
 
     // Fast forward to grace period
@@ -965,7 +964,7 @@ fun test_grace_and_vesting_status() {
     let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     assert_u8_eq(pod.pod_status(&clock), 5); // VESTING
 
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
@@ -991,7 +990,7 @@ fun test_full_pod_lifecycle_success() {
     let investor2 = @0x3;
     let investor3 = @0x4;
 
-    let (mut scenario, mut clock, mut settings, mut user_store, mut pod) = init2(TIME_SUBCRIB);
+    let (mut scenario, mut clock, mut user_store, mut pod) = init2(TIME_SUBCRIB);
     invest1(&mut pod, &user_store, 300_000, &clock, scenario.ctx());
 
     scenario.next_tx(investor2);
@@ -1053,7 +1052,7 @@ fun test_full_pod_lifecycle_success() {
     transfer::public_transfer(refund, @0x0);
     transfer::public_transfer(vested_tokens, @0x0);
 
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
 
 #[test]
@@ -1062,11 +1061,12 @@ fun test_full_pod_lifecycle_failure() {
     let investor = @0x2;
 
     // 2. Fast forward and invest (but not enough to reach min)
-    let (mut scenario, mut clock, mut settings, mut user_store, mut pod) = init2(TIME_SUBCRIB);
+    let (mut scenario, mut clock, mut user_store, mut pod) = init2(TIME_SUBCRIB);
     invest1(&mut pod, &user_store, 500_000, &clock, scenario.ctx());
 
     // 3. One investor cancels subscription
     scenario.next_tx(investor);
+    let mut settings = scenario.take_shared<GlobalSettings>();
     let refund = pod.cancel_subscription(
         &settings,
         &clock,
@@ -1100,6 +1100,7 @@ fun test_full_pod_lifecycle_failure() {
     assert_u64_eq(withdrawn_tokens.value(), (MAX_GOAL * PRICE_MULTIPLIER) / TOKEN_PRICE);
     transfer::public_transfer(withdrawn_tokens, @0x0);
 
+    test_scenario::return_shared(settings);
     test_scenario::return_to_sender(&scenario, cap);
-    cleanup(clock, pod, settings, user_store, scenario);
+    cleanup(clock, pod, user_store, scenario);
 }
