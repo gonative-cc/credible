@@ -4,22 +4,18 @@
 
 ### Add T&C support
 
-- New params in GlobalSettings: `tc_version: u16` and `accepted_tc: Table<address, u16>` of the latest accepted T&C version per user.
-- Admin function: `update_tc(global_settings, version)`: bump tc_version in the global settings, asserts that `version == global_settings.tc_version + 1`.
-- New user function: `accept_tc(global_settings, version)`: certifies that the user accepted the latest version and adds the record to `accepted_tc`.
-- New user function: `accepted_tc_version(global_settings, user_address): Option(u16)`: return None if the user didn't accept T&C or `Some(version)` of the latest s/he accepted.
-- User can only invest if he accepted the latest T&C.
-- `invest` function now takes the Global Settings as a required argument (in the second place).
+- New object: `UserStore` with `tc_version: u16` and `accepted_tc: Table<address, u16>` of the latest accepted T&C version per user.
+- Admin function: `pod::update_tc(user_store, version)`: bump tc_version, asserts that `version == user_store.tc_version + 1`.
+- New user function: `pod::accept_tc(user_store, version)`: certifies that the user accepted the latest version and adds the record to `accepted_tc`.
+- New user function: `pod::accepted_tc_version(user_store, user_address): Option(u16)`: return None if the user didn't accept T&C or `Some(version)` of the latest s/he accepted.
+- A user can only invest if s/he accepted the latest T&C.
+- `invest` function now takes the `UserStore` as a required argument (in the second place).
 
-Move tc_version and accepted_tc from GlobalSettings to a new struct: UserStore:
-```
-struct UserStore has key {
-    id: UID,
-    tc_version: u16,
-    accepted_tc: Table<address, u16>,
-}
-```
+### Other breaking changes:
 
+- removed `pod::get_grace_fee_pm`
+- renamed: `pod::get_global_settings` to `unpack_global_settings`
+- renamed: removed _get__ prefix from `pod::get_pod_params`, `pod::get_pod_info`, `pod::pod_num_investors`
 
 ## v0.2.0 (2025-12-12)
 

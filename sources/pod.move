@@ -155,14 +155,7 @@ public struct GlobalSettings has key {
     max_cliff_duration: u64,
 }
 
-/// Shared object for storing user-related data.
-public struct UserStore has key {
-    id: UID,
-    tc_version: u16,
-    accepted_tc: Table<address, u16>,
-}
-
-public fun get_global_settings(
+public fun unpack_global_settings(
     settings: &GlobalSettings,
 ): (u64, u64, u64, u64, u64, u64, u64, u64, u64, address, u64, u64) {
     (
@@ -181,9 +174,6 @@ public fun get_global_settings(
     )
 }
 
-public fun get_grace_fee_pm(s: &GlobalSettings): u64 { s.grace_fee_pm }
-
-// --- Platform Admin Functions ---
 public fun update_settings(
     settings: &mut GlobalSettings,
     _: &PlatformAdminCap,
@@ -243,6 +233,13 @@ public fun update_settings(
         settings.max_cliff_duration = option::destroy_some(max_cliff_duration);
     };
     emit(EventSettingsUpdated {});
+}
+
+/// Shared object for storing user-related data.
+public struct UserStore has key {
+    id: UID,
+    tc_version: u16,
+    accepted_tc: Table<address, u16>,
 }
 
 public fun update_tc(user_store: &mut UserStore, _: &PlatformAdminCap, version: u16) {
@@ -435,15 +432,15 @@ public fun create_pod<C, T>(
 
 // --- Public View Functions ---
 
-public fun get_pod_params<C, T>(pod: &Pod<C, T>): PodParams { pod.params }
+public fun pod_params<C, T>(pod: &Pod<C, T>): PodParams { pod.params }
 
-public fun get_pod_info<C, T>(pod: &Pod<C, T>): PodInfo {
+public fun pod_info<C, T>(pod: &Pod<C, T>): PodInfo {
     *df::borrow<u8, PodInfo>(&pod.id, KeyPodInfo)
 }
 
-public fun get_pod_total_raised<C, T>(p: &Pod<C, T>): u64 { p.total_raised }
+public fun pod_total_raised<C, T>(p: &Pod<C, T>): u64 { p.total_raised }
 
-public fun get_pod_num_investors<C, T>(p: &Pod<C, T>): u64 { p.num_investors }
+public fun pod_num_investors<C, T>(p: &Pod<C, T>): u64 { p.num_investors }
 
 public fun get_pod_token_price(p: &PodParams): u64 { p.token_price }
 

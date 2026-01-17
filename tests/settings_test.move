@@ -51,7 +51,7 @@ fun test_platform_initialization() {
         treasury,
         min_cliff_duration,
         max_cliff_duration,
-    ) = pod::get_global_settings(&settings);
+    ) = pod::unpack_global_settings(&settings);
 
     assert_u64_eq(max_immediate_unlock_pm, 100); // 10.0%
     assert_u64_eq(min_vesting_duration, DAY * 30 * 3); // 3 months
@@ -112,7 +112,7 @@ fun test_update_all_settings() {
         treasury,
         min_cliff_duration,
         max_cliff_duration,
-    ) = pod::get_global_settings(&settings);
+    ) = pod::unpack_global_settings(&settings);
     assert_u64_eq(max_immediate_unlock_pm, 100);
     assert_u64_eq(min_vesting_duration, DAY * 60);
     assert_u64_eq(max_vesting_duration, DAY * 365 * 2);
@@ -153,7 +153,7 @@ fun test_update_individual_settings() {
     );
 
     // Verify only max_immediate_unlock changed
-    let (max_immediate_unlock_pm, _, _, _, _, _, _, _, _, _, _, _) = pod::get_global_settings(
+    let (max_immediate_unlock_pm, _, _, _, _, _, _, _, _, _, _, _) = pod::unpack_global_settings(
         &settings,
     );
     assert_u64_eq(max_immediate_unlock_pm, 120);

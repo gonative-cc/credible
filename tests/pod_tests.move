@@ -194,7 +194,7 @@ fun test_create_pod_success() {
     let mut pod = scenario.take_shared<Pod<SUI, SUI>>();
     let cap = scenario.take_from_sender<PodAdminCap>();
 
-    let params = pod.get_pod_params();
+    let params = pod.pod_params();
     assert_u64_eq(params.get_pod_token_price(), TOKEN_PRICE);
     assert_u64_eq(params.get_pod_price_multiplier(), PRICE_MULTIPLIER);
     assert_u64_eq(params.get_pod_min_goal(), MIN_GOAL);
@@ -471,8 +471,8 @@ fun test_max_goal_reached_early() {
 
     // Should have 100_000 excess
     assert_u64_eq(excess2.value(), 100_000);
-    let params = pod.get_pod_params();
-    assert_u64_eq(pod.get_pod_total_raised(), MAX_GOAL);
+    let params = pod.pod_params();
+    assert_u64_eq(pod.pod_total_raised(), MAX_GOAL);
     assert_u64_eq(params.get_pod_subscription_end(), clock.timestamp_ms());
     transfer::public_transfer(excess2, @0x0);
 
@@ -508,7 +508,7 @@ fun test_multiple_investments_same_investor() {
     invest1(&mut pod, &user_store, 50_000, &clock, scenario.ctx());
 
     // Total should be combined
-    assert_u64_eq(pod.get_pod_total_raised(), 150_000);
+    assert_u64_eq(pod.pod_total_raised(), 150_000);
 
     cleanup(clock, pod, user_store, scenario);
 }
@@ -535,7 +535,7 @@ fun test_cancel_subscription() {
     test_scenario::return_shared(settings);
 
     // Total raised should be reduced
-    assert_u64_eq(pod.get_pod_total_raised(), kept);
+    assert_u64_eq(pod.pod_total_raised(), kept);
 
     cleanup(clock, pod, user_store, scenario);
 }
@@ -786,7 +786,7 @@ fun test_exit_grace_period() {
     assert!(pod.pod_status(&clock) == pod::status_grace());
     let (refund, vested_tokens) = pod.exit_investment(&clock, scenario.ctx());
 
-    let fee = pod.get_pod_params().get_pod_grace_fee_pm();
+    let fee = pod.pod_params().get_pod_grace_fee_pm();
     let expected_refund = 1_000_000 - ratio_ext_pm(1_000_000, fee);
     assert_u64_eq(refund.value(), expected_refund);
     assert_u64_eq(vested_tokens.value(), ratio_ext_pm(REQUIRED_TOKENS, fee));
