@@ -244,7 +244,12 @@ public fun update_tc(settings: &mut GlobalSettings, _: &PlatformAdminCap, versio
 public fun accept_tc(settings: &mut GlobalSettings, version: u16, ctx: &mut TxContext) {
     assert!(version == settings.tc_version, E_INVALID_TC_VERSION);
     let user = tx_context::sender(ctx);
-    settings.accepted_tc.add(user, version);
+    if (settings.accepted_tc.contains(user)) {
+        let v = &mut settings.accepted_tc[user];
+        *v = version;
+    } else {
+        settings.accepted_tc.add(user, version);
+    };
     emit(EventTcAccepted { user, version });
 }
 

@@ -6,6 +6,7 @@ use beelievers_kickstarter::pod::{
     GlobalSettings,
     Pod,
     PodAdminCap,
+    PlatformAdminCap,
     ratio_ext_pm,
     ratio_ext,
     init_for_tests,
@@ -387,7 +388,6 @@ fun test_invest_before_subscription() {
 fun test_invest_after_subscription_end() {
     let founder = @0x1;
     let investor = @0x2;
-
     let (mut scenario, mut clock, mut settings) = init1(founder);
 
     // Fast forward past subscription end
@@ -402,6 +402,49 @@ fun test_invest_after_subscription_end() {
     let investment = mint_for_testing<SUI>(100_000, scenario.ctx());
     let _excess = pod.invest(&settings, investment, &clock, scenario.ctx());
     transfer::public_transfer(_excess, @0x0);
+
+    cleanup(clock, pod, settings, scenario);
+}
+
+#[test]
+#[expected_failure(abort_code = pod::E_TC_NOT_ACCEPTED)]
+fun test_invest_not_accepted_tc() {
+    let (mut scenario, mut clock, mut settings, mut pod) = init2(TIME_SUBCRIB);
+    scenario.next_tx(@0x3);
+    invest1(&mut pod, &settings, 100_000, &clock, scenario.ctx());
+    cleanup(clock, pod, settings, scenario);
+}
+
+#[test]
+#[expected_failure(abort_code = pod::E_TC_NOT_ACCEPTED)]
+fun test_invest_not_accepted_latest_tc() {
+    let founder = @0x1;
+    let investor = @0x2;
+    let (mut scenario, mut clock, mut settings, mut pod) = init2(TIME_SUBCRIB);
+    scenario.next_tx(founder);
+    let cap = scenario.take_from_sender<PlatformAdminCap>();
+    settings.update_tc(&cap, 2);
+
+    scenario.next_tx(investor);
+    invest1(&mut pod, &settings, 100_000, &clock, scenario.ctx());
+
+    test_scenario::return_to_sender(&scenario, cap);
+    cleanup(clock, pod, settings, scenario);
+}
+
+#[test]
+fun test_invest_accepted_latest_tc() {
+    let founder = @0x1;
+    let investor = @0x2;
+    let (mut scenario, mut clock, mut settings, mut pod) = init2(TIME_SUBCRIB);
+    scenario.next_tx(founder);
+    let cap = scenario.take_from_sender<PlatformAdminCap>();
+    settings.update_tc(&cap, 2);
+    test_scenario::return_to_sender(&scenario, cap);
+
+    scenario.next_tx(investor);
+    settings.accept_tc(2, scenario.ctx());
+    invest1(&mut pod, &settings, 100_000, &clock, scenario.ctx());
 
     cleanup(clock, pod, settings, scenario);
 }
@@ -1051,6 +1094,3 @@ fun test_full_pod_lifecycle_failure() {
     test_scenario::return_to_sender(&scenario, cap);
     cleanup(clock, pod, settings, scenario);
 }
-
-// TODO add tests for
-// + tc_accept

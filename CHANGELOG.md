@@ -7,6 +7,7 @@
 - New params in GlobalSettings: `tc_version: u16` and `accepted_tc: Table<address, u16>` of the latest accepted T&C version per user.
 - Admin function: `update_tc(global_settings, version)`: bump tc_version in the global settings, asserts that `version == global_settings.tc_version + 1`.
 - New user function: `accept_tc(global_settings, version)`: certifies that the user accepted the latest version and adds the record to `accepted_tc`.
+- New user function: `accepted_tc_version(global_settings, user_address): Option(u16)`: return None if the user didn't accept T&C or `Some(version)` of the latest s/he accepted.
 - User can only invest if he accepted the latest T&C.
 - `invest` function now takes the Global Settings as a required argument (in the second place).
 
