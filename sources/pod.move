@@ -40,6 +40,8 @@ const E_NOTHING_TO_EXIT: u64 = 13;
 const E_ZERO_INVESTMENT: u64 = 14;
 const E_WRONG_URL_LEN: u64 = 15;
 const E_WRONG_LEN: u64 = 16;
+const E_TC_NOT_ACCEPTED: u64 = 17;
+const E_INVALID_TC_VERSION: u64 = 18;
 
 const MAX_URL_LEN: u64 = 48;
 
@@ -65,6 +67,13 @@ fun init(ctx: &mut TxContext) {
         max_cliff_duration: day * 365 * 2, // 2 years max cliff
     };
     transfer::share_object(settings);
+
+    let user_store = UserStore {
+        id: object::new(ctx),
+        tc_version: 1, // Initial T&C version
+        accepted_tc: table::new(ctx),
+    };
+    transfer::share_object(user_store);
 
     let admin_cap = PlatformAdminCap { id: object::new(ctx) };
     transfer::public_transfer(admin_cap, tx_context::sender(ctx));
@@ -147,7 +156,7 @@ public struct GlobalSettings has key {
     max_cliff_duration: u64,
 }
 
-public fun get_global_settings(
+public fun unpack_global_settings(
     settings: &GlobalSettings,
 ): (u64, u64, u64, u64, u64, u64, u64, u64, u64, address, u64, u64) {
     (
@@ -166,12 +175,9 @@ public fun get_global_settings(
     )
 }
 
-public fun get_grace_fee_pm(s: &GlobalSettings): u64 { s.grace_fee_pm }
-
-// --- Platform Admin Functions ---
 public fun update_settings(
-    _cap: &PlatformAdminCap,
     settings: &mut GlobalSettings,
+    _: &PlatformAdminCap,
     max_immediate_unlock_pm: Option<u64>,
     min_vesting_duration: Option<u64>,
     max_vesting_duration: Option<u64>,
@@ -230,6 +236,41 @@ public fun update_settings(
     emit(EventSettingsUpdated {});
 }
 
+/// Shared object for storing user-related data.
+public struct UserStore has key {
+    id: UID,
+    tc_version: u16,
+    accepted_tc: Table<address, u16>,
+}
+
+public fun update_tc(user_store: &mut UserStore, _: &PlatformAdminCap, version: u16) {
+    assert!(version == user_store.tc_version + 1, E_INVALID_TC_VERSION);
+    user_store.tc_version = version;
+}
+
+public fun accept_tc(user_store: &mut UserStore, version: u16, ctx: &mut TxContext) {
+    assert!(version == user_store.tc_version, E_INVALID_TC_VERSION);
+    let user = tx_context::sender(ctx);
+    if (user_store.accepted_tc.contains(user)) {
+        let v = &mut user_store.accepted_tc[user];
+        *v = version;
+    } else {
+        user_store.accepted_tc.add(user, version);
+    };
+    emit(EventTcAccepted { user, version });
+}
+
+public fun tc_version(user_store: &UserStore): u16 {
+    user_store.tc_version
+}
+
+public fun accepted_tc_version(user_store: &UserStore, user: address): Option<u16> {
+    if (!user_store.accepted_tc.contains(user)) {
+        return option::none()
+    };
+    option::some(user_store.accepted_tc[user])
+}
+
 //
 // --- Events ---
 //
@@ -264,6 +305,7 @@ public struct EventInvestorClaim has copy, drop {
 public struct EventFounderClaim has copy, drop { pod_id: ID, total_amount: u64 }
 public struct EventFailedPodRefund has copy, drop { pod_id: ID, investor: address }
 public struct EventFailedPodWithdraw has copy, drop { pod_id: ID }
+public struct EventTcAccepted has copy, drop { user: address, version: u16 }
 
 //
 // --- Pod Creation and Management ---
@@ -391,15 +433,15 @@ public fun create_pod<C, T>(
 
 // --- Public View Functions ---
 
-public fun get_pod_params<C, T>(pod: &Pod<C, T>): PodParams { pod.params }
+public fun pod_params<C, T>(pod: &Pod<C, T>): PodParams { pod.params }
 
-public fun get_pod_info<C, T>(pod: &Pod<C, T>): PodInfo {
+public fun pod_info<C, T>(pod: &Pod<C, T>): PodInfo {
     *df::borrow<u8, PodInfo>(&pod.id, KeyPodInfo)
 }
 
-public fun get_pod_total_raised<C, T>(p: &Pod<C, T>): u64 { p.total_raised }
+public fun pod_total_raised<C, T>(p: &Pod<C, T>): u64 { p.total_raised }
 
-public fun get_pod_num_investors<C, T>(p: &Pod<C, T>): u64 { p.num_investors }
+public fun pod_num_investors<C, T>(p: &Pod<C, T>): u64 { p.num_investors }
 
 public fun get_pod_token_price(p: &PodParams): u64 { p.token_price }
 
@@ -462,6 +504,7 @@ public fun investor_record<C, T>(pod: &Pod<C, T>, investor: address): Option<Inv
 
 public fun invest<C, T>(
     pod: &mut Pod<C, T>,
+    user_store: &UserStore,
     mut investment: Coin<C>,
     clock: &Clock,
     ctx: &mut TxContext,
@@ -472,6 +515,12 @@ public fun invest<C, T>(
     let investment_amount = investment.value();
     assert!(investment_amount > 0, E_ZERO_INVESTMENT);
     let investor = ctx.sender();
+    let accepted_version = if (user_store.accepted_tc.contains(investor)) {
+        user_store.accepted_tc[investor]
+    } else {
+        0
+    };
+    assert!(accepted_version >= user_store.tc_version, E_TC_NOT_ACCEPTED);
     let new_total_raised = pod.total_raised + investment_amount;
 
     let (actual_investment, excess_coin) = if (new_total_raised > pod.params.max_goal) {

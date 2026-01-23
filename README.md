@@ -43,6 +43,7 @@ BTCFi ecosystem face a critical bottleneck:
 - Curated Vetting & Incentives: Projects can apply for BTCFi incentives. Upon review by the Beelievers committee, additional incentives can be applied for investors, maintaining quality standards.
 - Token Distribution: platform provides a stable token distribution mechanism through an investment mechanism.
 - Strong Community: Beelievers Kickstarter aims to be the most recognized brand in crowdfunding with a built-in community of active backers.
+- Terms & Conditions: investor must accept T&C.
 
 ## Specification
 
@@ -103,15 +104,18 @@ Subscription and a setup:
 
 ```mermaid
 graph TD
+     classDef sticky fill:#f9f7bb,stroke:#d4d4d4,stroke-width:1px;
      A[Founders create Pod<br>supply tokens and pays a fee] --> C[Subscription phase begins]
      A --> B[Collect protocol fees]
-     C --> D1[Investors subscribing<br>investing money]
+     C --> D1["Investors subscribing<br>(investing money)"]
      D1 --> D2{Subscription status}
+     D1 --- DN>Assert user acceted T&C]
+     class DN sticky
      D2 -->|time end<br>min goal not reached| E[Pod ends - refunds issued]
      D2 -->|Max goal reached| H1[Subscription ends early]
      D2 -->|time end<br>min goal reached| H2[Subscription period ends]
      D2 -->|time not ended| D1
-     D1 --> |investor cancel subscription| F[return investment - cancel_subscription fee]
+     D1 --> |investor cancels subscription| F[return investment - cancel_subscription fee]
      F --> B
      H1 --> J[Grace period begins]
      H2 --> J
@@ -183,6 +187,19 @@ At the end: she got 45 USDC back and received 5500 X tokens.
 | `min_cliff_duration`        | 0         | Minimum cliff duration for a Pod                                                                               |
 | `max_cliff_duration`        | 2 years   | Maximum cliff duration for a Pod                                                                               |
 
+### Terms & Conditions
+
+All users must accept the platform's terms and conditions before participating in any investment. The platform tracks T&C acceptance per user address.
+
+- **Current T&C Version**: Maintained in `UserStore.tc_version`, starts at 1
+- **Acceptance Tracking**: The platform tracks each user's accepted T&C version in `UserStore.accepted_tc` table
+- **Platform Admin Functions**:
+  - `UserStore.update_tc(admin_cap, version)`: Increments the T&C version. Must be `version == tc_version + 1`
+- **User Functions**:
+  - `UserStore.accept_tc(version)`: Accepts the current T&C version. Must match the latest `tc_version`
+
+The T&C version can be bumped by platform administrators when terms change, requiring all users to re-accept before investing. This ensures all users are bound by the current platform terms.
+
 ### Phase 1: Pod Creation
 
 Founders create a `Pod` and:
@@ -206,7 +223,8 @@ Founders create a `Pod` and:
 
 Once a pod is created, anyone can subscribe for investment during the subscription phase:
 
-1. Investors put the accepted currency in the `Pod` to subscribe for tokens.
+1. Investors sends the accepted currency in the `Pod` to subscribe for tokens. 
+   Note: investor must accept the latest T&C before investing!
 1. If the minimum investment goal is not reached before the subscription end date:
    - the Pod is canceled,
    - investors receive 100% of their investment back,

@@ -64,8 +64,8 @@ The entire platform is implemented in a single Move modules (.move files): produ
 1. **INACTIVE**: Before subscription starts
 2. **SUBSCRIPTION**: Active investment period (must be ≥ 7 days)
 3. **FAILED**: Min goal not reached, refunds issued
-5. **GRACE**: Min goal reached, grace period during which vesting doesn't happen, but investors can withdraw with a reduced grace fee.
-4. **VESTING**: Success case, funds and tokens vest linearly
+4. **GRACE**: Min goal reached, grace period during which vesting doesn't happen, but investors can withdraw with a reduced grace fee.
+5. **VESTING**: Success case, funds and tokens vest linearly
 
 **Core Functions:**
 
@@ -84,6 +84,11 @@ The entire platform is implemented in a single Move modules (.move files): produ
 - **Generic Types**: `Pod<C, T>` allows any currency/token pair
 - **Capability-Based Security**: Admin caps control privileged operations
 - **Time-Based State**: Uses `Clock` for timestamp-based logic
+
+
+## Coding conventions
+
+Use method call style. When a module `m` declares function `f` that takes object `o` that is in that module, then instead writing `m::f(o)` use method call style: `o.f()` everywhere (also in other modules that import object `o`).
 
 ## Development Commands
 
@@ -116,6 +121,7 @@ make setup-hooks
 **Test Structure:**
 
 The test suite (`tests/pod_tests.move`) provides comprehensive coverage:
+
 - Platform initialization and settings updates
 - Pod creation validation (all error cases)
 - Investment scenarios (single/multiple investors, max goal, cancellations)
@@ -126,6 +132,7 @@ The test suite (`tests/pod_tests.move`) provides comprehensive coverage:
 - Full integration tests covering complete pod lifecycles
 
 Tests use Sui's `test_scenario` framework with helpers:
+
 - `DAY`, `HOUR`, `MINUTE` constants
 - `assert_u64_eq()` and `assert_u8_eq()` assertion helpers
 - Common pattern: setup → create pod → invest → verify state transitions
@@ -139,4 +146,3 @@ Tests use Sui's `test_scenario` framework with helpers:
 **Precision:** All percentage calculations use permille (1000) with u128 intermediate results to prevent overflow.
 
 **Error Codes:** Defined as constants (e.g., `E_INVALID_PARAMS`, `E_POD_NOT_SUBSCRIPTION`) for explicit abort conditions.
-
