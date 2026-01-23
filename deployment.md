@@ -1,5 +1,16 @@
 # Deployment info
 
+## v0.3.0 Jan 23 2026
+
+Deployment Tx: [7sTnAQoq4d2AvT3Ep2vHcMcMu9jPe4UUcRTwsTJDQpfh](https://testnet.suivision.xyz/txblock/7sTnAQoq4d2AvT3Ep2vHcMcMu9jPe4UUcRTwsTJDQpfh)
+package id: 0x9c22a372e972c5ec5d60494fb88fe25b705c31e625c07bc58114a927ed04af2b
+Objects:
+
+- PlatformAdminCap: 0x9a4a26cdcf07542f5951157c6774acf56c3446185ac7dd165795f869304a5df7
+- UpgradeCap: 0x5fb8998370a2357e12b1d5bbe5c0ec71973e159a980999c9b6a3e686aa1ed041
+- GlobalSettings: 0x8df0bf9c0c730d20df71f7d7b2fe1c60d74e694176113aaa6f091d4e602b02a2
+- UserStore: 0x1ea2a1a90c8661f7a4c48f1347116bb2ad09b6b6e459ebc7070cce31b7ff967a
+
 ## v0.2.1 Dec 29 2025
 
 Deployment Tx: [4BU4XVPArspWU492pUyW7wFAzPmr7FBmowjMEgqzPHiq](https://testnet.suivision.xyz/txblock/4BU4XVPArspWU492pUyW7wFAzPmr7FBmowjMEgqzPHiq)
